@@ -1,4 +1,3 @@
-<img width="850" height="1650" alt="tv_banner" src="https://github.com/user-attachments/assets/791e9389-73dc-4272-9aef-e13bb4d9b7b2" />
 
 ## Silikon - Device info checker with a MD3E desing
 This is a simple mini-utility for checking basic information about a device, for example: **information about the processor, GPU, display, android**, and so on
