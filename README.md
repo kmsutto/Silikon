@@ -36,3 +36,8 @@ Want to make your own version of this application? or assemble it completely for
 - [Google](https://developer.android.com/compose): For the Android Jetpack suite and Material Design 3 components that power the user interface.
 - [JetBrains](https://kotlinlang.org/): For the Kotlin programming language.
 - [OST-Tools](https://github.com/ost-sys/ost-program-android): for the inspiration :)
+
+## License
+
+This project is licensed under the **MIT License**.  
+For more details, see the [LICENSE](./LICENSE) file.
