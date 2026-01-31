@@ -86,9 +86,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         composable(
                             "Dashboard",
-                            // Используем enterTransition
                             enterTransition = { AppAnimations.enterTransition(0, initialState.destination.route?.toTabIndex() ?: 0) },
-                            // Используем exitTransition
                             exitTransition = { AppAnimations.exitTransition(targetState.destination.route?.toTabIndex() ?: 0, 0) }
                         ) { HomeScreen() }
 
