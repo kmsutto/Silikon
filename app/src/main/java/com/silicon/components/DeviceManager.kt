@@ -27,7 +27,14 @@ object DeviceManager {
         val level: String, val status: String, val temp: String, val technology: String, val capacity: String, val cycles: String
     )
 
-    private var cachedGpuModel: String? = null
+    data class GpuData(
+        val renderer: String,
+        val vendor: String,
+        val version: String,
+        val extensionsCount: String
+    )
+
+    private var cachedGpuData: GpuData? = null
 
     private fun findValueInFiles(paths: List<String>): String {
         for (path in paths) {
@@ -48,14 +55,19 @@ object DeviceManager {
         } catch (_: Exception) { defaultValue }
     }
 
-    fun getGpuModel(context: Context? = null): String {
-        if (!cachedGpuModel.isNullOrEmpty()) return cachedGpuModel!!
+    fun getGpuDetails(): GpuData {
+        if (cachedGpuData != null) return cachedGpuData!!
+
+        var renderer = "Unknown"
+        var vendor = "Unknown"
+        var version = "Unknown"
+        var extensions = "0"
 
         try {
             val egl = EGLContext.getEGL() as EGL10
             val display = egl.eglGetDisplay(EGL10.EGL_DEFAULT_DISPLAY)
-            val version = IntArray(2)
-            egl.eglInitialize(display, version)
+            val ver = IntArray(2)
+            egl.eglInitialize(display, ver)
 
             val configAttribs = intArrayOf(
                 EGL10.EGL_RED_SIZE, 8,
@@ -76,32 +88,30 @@ object DeviceManager {
 
             egl.eglMakeCurrent(display, eglSurface, eglSurface, eglContext)
 
-            val renderer = GLES20.glGetString(GLES20.GL_RENDERER)
+            renderer = GLES20.glGetString(GLES20.GL_RENDERER) ?: "Unknown"
+            vendor = GLES20.glGetString(GLES20.GL_VENDOR) ?: "Unknown"
+
+            val fullVersion = GLES20.glGetString(GLES20.GL_VERSION) ?: "Unknown"
+            version = if (fullVersion.startsWith("OpenGL ES")) {
+                fullVersion.split(" ").take(3).joinToString(" ")
+            } else {
+                fullVersion
+            }
+
+            val extString = GLES20.glGetString(GLES20.GL_EXTENSIONS)
+            extensions = extString?.split(" ")?.size?.toString() ?: "0"
 
             egl.eglDestroySurface(display, eglSurface)
             egl.eglDestroyContext(display, eglContext)
             egl.eglTerminate(display)
 
-            if (!renderer.isNullOrEmpty()) {
-                cachedGpuModel = renderer
-                return renderer
-            }
         } catch (e: Exception) {
-            Log.e("DeviceManager", "Failed to get GL Renderer: ${e.message}")
+            Log.e("DeviceManager", "Failed to get GPU details: ${e.message}")
         }
 
-        val soc = getProcessorName().lowercase()
-        val fallback = when {
-            "tensor" in soc && !soc.contains("g2") && !soc.contains("g3") -> "Mali-G78"
-            "tensor g2" in soc -> "Mali-G710"
-            "tensor g3" in soc -> "Mali-G715"
-            "snapdragon" in soc -> "Adreno (Unknown)"
-            "mt6" in soc || "dimensity" in soc -> "Mali (Dimensity)"
-            "exynos" in soc -> "Mali/Xclipse"
-            else -> "Unknown Renderer"
-        }
-        cachedGpuModel = fallback
-        return fallback
+        val data = GpuData(renderer, vendor, version, extensions)
+        cachedGpuData = data
+        return data
     }
 
     private fun mapApiToName(apiLevel: Int): String {
@@ -117,6 +127,8 @@ object DeviceManager {
             28 -> "Pie"
             27 -> "Oreo v2"
             26 -> "Oreo"
+            25 -> "Nougat MR1"
+            24 -> "Nougat"
             else -> "Legacy"
         }
     }
@@ -125,10 +137,8 @@ object DeviceManager {
 
     fun getVndkVersion(): String {
         var version = getSystemProperty("ro.vndk.version")
-
         if (version.isEmpty()) version = getSystemProperty("ro.board.api_level")
         if (version.isEmpty()) version = getSystemProperty("ro.vendor.build.version.sdk")
-
         return if (version.isNotEmpty()) version else "Not Found"
     }
 
