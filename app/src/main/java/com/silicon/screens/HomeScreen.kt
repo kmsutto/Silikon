@@ -1,8 +1,10 @@
 package com.silicon.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Smartphone
@@ -13,29 +15,46 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.silicon.ui.components.DeviceManager
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(paddingValues: PaddingValues) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(paddingValues)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Surface(
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            shape = CircleShape,
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+        ) {
+            Text(
+                text = "Overview",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
         DashboardCard(
             icon = Icons.Default.Smartphone,
             title = DeviceManager.getDeviceName(),
             subtitle = "Looks Good!",
-            footer = DeviceManager.getDeviceCodename()
+            footer = DeviceManager.getDeviceCodename(),
+            isPrimary = true
         )
 
         DashboardCard(
             icon = Icons.Default.CheckCircle,
-            title = "Last update installed",
-            subtitle = "github.com/kmsutto/silicon",
-            footer = ""
+            title = "Updates",
+            subtitle = "Up to date",
+            footer = "github.com/kmsutto/silicon",
+            isPrimary = false
         )
     }
 }
@@ -45,14 +64,17 @@ fun DashboardCard(
     icon: ImageVector,
     title: String,
     subtitle: String,
-    footer: String
+    footer: String,
+    isPrimary: Boolean = false
 ) {
+    val containerColor = if (isPrimary) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer
+    val contentColor = if (isPrimary) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.fillMaxWidth()
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -60,34 +82,41 @@ fun DashboardCard(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if(isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = if(isPrimary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.width(20.dp))
+            Spacer(modifier = Modifier.width(16.dp))
 
             Column {
                 Text(
                     text = title,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = contentColor.copy(alpha = 0.8f)
                 )
-                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 20.sp,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = contentColor
                 )
                 if (footer.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = footer,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        style = MaterialTheme.typography.bodySmall,
+                        color = contentColor.copy(alpha = 0.6f)
                     )
                 }
             }
