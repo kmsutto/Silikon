@@ -355,7 +355,7 @@ fun BatteryContent(bat: com.silicon.ui.components.DeviceManager.BatteryData) {
 
 @Composable
 fun ControlBlock(modifier: Modifier, icon: ImageVector, label: String, value: String, isActive: Boolean) {
-    val containerColor = if(isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.onPrimaryContainer
+    val containerColor = if(isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
     val contentColor = if(isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
     Card(modifier.height(100.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = containerColor)) {
         Column(Modifier.padding(16.dp).fillMaxSize(), Arrangement.SpaceBetween) {
