@@ -4,14 +4,12 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.opengl.GLES20
 import android.os.BatteryManager
 import android.os.Build
 import android.util.Log
-import android.util.SizeF
 import android.view.WindowManager
 import android.view.WindowMetrics
 import java.io.BufferedReader
@@ -23,7 +21,6 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import kotlin.math.pow
 import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 object DeviceManager {
 
@@ -56,7 +53,7 @@ object DeviceManager {
     )
 
     private var cachedGpuData: GpuData? = null
-
+    
     private fun getSystemProperty(key: String, defaultValue: String = ""): String {
         return try {
             Class.forName("android.os.SystemProperties").getMethod("get", String::class.java, String::class.java).invoke(null, key, defaultValue) as String
@@ -208,8 +205,9 @@ object DeviceManager {
             "Front"
         } else {
             when {
-                fl < 4.5f -> "Ultrawide"
-                fl > 8.5f -> "Telephoto"
+                fl > 0f && fl < 3.8f -> "Ultrawide"
+                fl >= 3.8f && fl < 7.5f -> "Main"
+                fl >= 7.5f -> "Telephoto"
                 else -> "Main"
             }
         }
