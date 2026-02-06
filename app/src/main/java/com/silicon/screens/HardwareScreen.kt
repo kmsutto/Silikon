@@ -1,5 +1,6 @@
 package com.silicon.ui.screens
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -7,18 +8,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryStd
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.DeveloperBoard
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material.icons.filled.Thermostat
-import androidx.compose.material.icons.filled.Vibration
-import androidx.compose.material.icons.filled.VideogameAsset
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
@@ -40,6 +32,30 @@ fun HardwareScreen() {
     val density = remember { DeviceManager.getDensity(context) }
     val isHdr = remember { DeviceManager.isHdrSupported(context) }
     val cameraSpecs = remember { DeviceManager.getCameraSpecs(context) }
+
+    val sharedPref = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+    val shouldShowWarning = remember { mutableStateOf(sharedPref.getBoolean("camera_beta_warning", true)) }
+
+    if (shouldShowWarning.value) {
+        AlertDialog(
+            onDismissRequest = { },
+            icon = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
+            title = { Text("Warning!") },
+            text = {
+                Text("Camera information is currently in BETA. \n\nThe hardware detection algorithm may not be 100% accurate on all devices yet.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        sharedPref.edit().putBoolean("camera_beta_warning", false).apply()
+                        shouldShowWarning.value = false
+                    }
+                ) {
+                    Text("Got it")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -339,7 +355,7 @@ fun BatteryContent(bat: com.silicon.ui.components.DeviceManager.BatteryData) {
 
 @Composable
 fun ControlBlock(modifier: Modifier, icon: ImageVector, label: String, value: String, isActive: Boolean) {
-    val containerColor = if(isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+    val containerColor = if(isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.onPrimaryContainer
     val contentColor = if(isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
     Card(modifier.height(100.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = containerColor)) {
         Column(Modifier.padding(16.dp).fillMaxSize(), Arrangement.SpaceBetween) {
