@@ -4,7 +4,7 @@ This is a simple mini-utility for checking basic information about a device, for
 
 ## Features
 - Simple MD3E design
-- Support from Android 8 to Android 16
+- Support from Android 11 to Android 16
 - Takes up little space
 
 ## Build App
@@ -34,7 +34,7 @@ Want to make your own version of this application? or assemble it completely for
 
 - [Google](https://developer.android.com/compose): For the Android Jetpack suite and Material Design 3 components that power the user interface.
 - [JetBrains](https://kotlinlang.org/): For the Kotlin programming language.
-- [OST-Tools](https://github.com/ost-sys/ost-program-android): for the inspiration :)
+- [OST-Tools](https://github.com/ost-sys/ost-program-android): For the inspiration :)
 
 ## License
 
