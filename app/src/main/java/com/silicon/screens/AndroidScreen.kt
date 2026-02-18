@@ -2,7 +2,6 @@ package com.silicon.ui.screens
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -28,6 +27,7 @@ import com.silicon.ui.components.DeviceManager
 @Composable
 fun AndroidScreen() {
     val context = LocalContext.current
+
     val isRooted = remember { DeviceManager.isRooted() }
     val patch = remember { DeviceManager.getSecurityPatch() }
     val bootloader = remember { DeviceManager.getBootloaderStatus() }
@@ -79,7 +79,14 @@ fun AndroidScreen() {
         AndroidSectionGroup(title = "Security", icon = Icons.Default.Security) {
             InfoRow(Icons.Default.Update, "Security Patch", patch, true)
             InfoRow(Icons.Default.Lock, "Bootloader", bootloader, true)
-            InfoRow(Icons.Default.Shield, "Root Access", if (isRooted) "Detected" else "Not Detected", true)
+
+            InfoRow(
+                icon = Icons.Default.Shield,
+                label = "Root Access",
+                value = if (isRooted) "Detected" else "Not Detected",
+                showDivider = true
+            )
+
             InfoRow(Icons.Default.VerifiedUser, "Play Integrity", integrity, false)
         }
 
@@ -107,10 +114,9 @@ private fun launchEasterEgg(context: Context) {
             val settingsIntent = Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)
             settingsIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             context.startActivity(settingsIntent)
-            Toast.makeText(context, "Easter Egg not found directly, opening Settings", Toast.LENGTH_SHORT).show()
         }
     } catch (e: Exception) {
-        Toast.makeText(context, "Could not launch Easter Egg: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Easter Egg not found: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -118,18 +124,18 @@ private fun launchEasterEgg(context: Context) {
 fun AndroidSectionGroup(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
             shape = CircleShape,
             modifier = Modifier.padding(start = 4.dp)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 Spacer(Modifier.width(8.dp))
@@ -162,11 +168,13 @@ fun InfoRow(
     showDivider: Boolean,
     onClick: (() -> Unit)? = null
 ) {
-    Column(
-        modifier = Modifier.then(
-            if (onClick != null) Modifier.clickable { onClick() } else Modifier
-        )
-    ) {
+    val modifier = if (onClick != null) {
+        Modifier.clickable { onClick() }
+    } else {
+        Modifier
+    }
+
+    Column(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -176,10 +184,10 @@ fun InfoRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
             )
-            Spacer(Modifier.width(20.dp))
+            Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
@@ -194,11 +202,12 @@ fun InfoRow(
                 )
             }
         }
+
         if (showDivider) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 64.dp, end = 20.dp)
+                    .padding(start = 60.dp, end = 20.dp)
                     .height(1.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))

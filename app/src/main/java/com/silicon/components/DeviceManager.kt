@@ -4,23 +4,27 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
 import android.opengl.GLES20
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Environment
+import android.os.StatFs
+import android.os.SystemClock
 import android.util.Log
 import android.view.WindowManager
 import android.view.WindowMetrics
+import com.silicon.ui.components.database.DataPixel
+import com.silicon.ui.components.database.DataPlus
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileReader
+import java.io.InputStreamReader
 import java.text.DecimalFormat
+import java.util.concurrent.TimeUnit
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import kotlin.math.pow
-import kotlin.math.roundToInt
 
 object DeviceManager {
 
@@ -30,11 +34,12 @@ object DeviceManager {
         val level: String, val status: String, val temp: String, val technology: String, val capacity: String, val cycles: String
     )
 
+    data class StorageData(
+        val total: String, val used: String, val percent: Int, val progress: Float
+    )
+
     data class GpuData(
-        val renderer: String,
-        val vendor: String,
-        val version: String,
-        val extensionsCount: String
+        val renderer: String, val vendor: String, val version: String, val extensionsCount: String
     )
 
     data class CameraLensInfo(
@@ -53,7 +58,7 @@ object DeviceManager {
     )
 
     private var cachedGpuData: GpuData? = null
-    
+
     private fun getSystemProperty(key: String, defaultValue: String = ""): String {
         return try {
             Class.forName("android.os.SystemProperties").getMethod("get", String::class.java, String::class.java).invoke(null, key, defaultValue) as String
@@ -76,28 +81,58 @@ object DeviceManager {
     fun getSecurityPatch(): String = Build.VERSION.SECURITY_PATCH
 
     fun isRooted(): Boolean {
+        val buildTags = Build.TAGS
+        if (buildTags != null && buildTags.contains("test-keys")) return true
+
         val paths = arrayOf(
             "/system/app/Superuser.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su",
             "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su",
-            "/system/bin/failsafe/su", "/data/local/su", "/su/bin/su"
+            "/system/bin/failsafe/su", "/data/local/su", "/su/bin/su",
+            "/data/adb/magisk", "/sbin/magisk", "/system/xbin/daemonsu"
         )
-        return paths.any { File(it).exists() }
+        if (paths.any { File(it).exists() }) return true
+
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("which", "su"))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            reader.readLine() != null
+        } catch (t: Throwable) {
+            false
+        }
     }
 
     fun getBootloaderStatus(): String {
         val state = getSystemProperty("ro.boot.verifiedbootstate")
-        val locked = getSystemProperty("ro.boot.flash.locked")
-        return when {
-            state == "green" || locked == "1" -> "Locked"
-            state == "orange" || locked == "0" -> "Unlocked"
-            state == "yellow" -> "Locked (Custom Key)"
-            state == "red" -> "Unlocked (Warning)"
-            else -> if (state.isNotEmpty()) state.replaceFirstChar { it.uppercase() } else "Unknown"
+        return when (state) {
+            "green" -> "Locked"
+            "yellow" -> "Signatures"
+            "orange" -> "Unlocked"
+            "red" -> "Warning"
+            else -> {
+                val locked = getSystemProperty("ro.boot.flash.locked")
+                when (locked) {
+                    "1" -> "Locked"
+                    "0" -> "Unlocked"
+                    else -> if (state.isNotEmpty()) state.replaceFirstChar { it.uppercase() } else "Unknown"
+                }
+            }
         }
     }
 
     fun getIntegrityPrediction(): String {
-        return if (getBootloaderStatus().startsWith("Locked") && !isRooted()) "Meets Basic & Strong" else "Unlikely to pass"
+        val blStatus = getBootloaderStatus()
+        val isRoot = isRooted()
+
+        return when {
+            blStatus.contains("Unlocked", ignoreCase = true) -> "Unlikely"
+            blStatus.contains("Warning", ignoreCase = true) -> "Unlikely"
+            isRoot -> "Unlikely (Root Detected)"
+
+            blStatus == "Locked" -> "Meets Basic & Strong"
+            blStatus.contains("Custom Key") -> "Meets Basic Integrity"
+
+            else -> "Unknown Prediction"
+        }
     }
 
     fun getGpuDetails(): GpuData {
@@ -131,118 +166,56 @@ object DeviceManager {
     }
 
     fun getCameraSpecs(context: Context): CameraSpecs {
-        val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val backList = mutableListOf<CameraLensInfo>()
-        val frontList = mutableListOf<CameraLensInfo>()
+        val possibleNames = listOf(Build.DEVICE, Build.MODEL, Build.PRODUCT)
 
-        try {
-            for (id in manager.cameraIdList) {
-                val chars = manager.getCameraCharacteristics(id)
-                val facing = chars.get(CameraCharacteristics.LENS_FACING)
-                if (facing == CameraCharacteristics.LENS_FACING_EXTERNAL) continue
-
-                val physicalIds = chars.physicalCameraIds
-
-                if (physicalIds.isNotEmpty()) {
-                    for (physId in physicalIds) {
-                        val physChars = manager.getCameraCharacteristics(physId)
-                        addLensInfo(physChars, facing, backList, frontList)
-                    }
-                } else {
-                    addLensInfo(chars, facing, backList, frontList)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("Silicon", "Camera error: ${e.message}")
+        var pixelSpecs: List<CameraLensInfo>? = null
+        for (name in possibleNames) {
+            pixelSpecs = DataPixel.getSpecs(name)
+            if (pixelSpecs != null) break
         }
 
-        return CameraSpecs(
-            backCameras = backList.distinctBy { it.focalLength + it.megapixels }.sortedBy {
-                it.focalLength.replace(" mm", "").replace(",", ".").toFloatOrNull() ?: 0f
-            },
-            frontCameras = frontList.distinctBy { it.megapixels }
-        )
-    }
-
-    private fun addLensInfo(
-        chars: CameraCharacteristics,
-        facing: Int?,
-        backList: MutableList<CameraLensInfo>,
-        frontList: MutableList<CameraLensInfo>
-    ) {
-        val info = extractLensInfo(chars, facing)
-        if (facing == CameraCharacteristics.LENS_FACING_BACK) backList.add(info) else frontList.add(info)
-    }
-
-    private fun extractLensInfo(chars: CameraCharacteristics, facing: Int?): CameraLensInfo {
-        val activeArray = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
-        val pixelArray = chars.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
-
-        val width = activeArray?.width() ?: pixelArray?.width ?: 0
-        val height = activeArray?.height() ?: pixelArray?.height ?: 0
-
-        val mpCount = (width * height) / 1_000_000.0
-        val mpStr = DecimalFormat("#.#").format(mpCount) + " MP"
-        val resStr = "$width x $height"
-
-        val apertures = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
-        val apertureVal = apertures?.minOrNull() ?: 0f
-        val apStr = "f/${DecimalFormat("#.##").format(apertureVal)}"
-
-        val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-        val fl = focalLengths?.firstOrNull() ?: 0f
-        val flStr = "${DecimalFormat("#.#").format(fl)} mm"
-
-        val sensorSizeRect = chars.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
-        val sensorStr = if (sensorSizeRect != null) {
-            "${DecimalFormat("#.##").format(sensorSizeRect.width)} x ${DecimalFormat("#.##").format(sensorSizeRect.height)} mm"
-        } else "Unknown"
-
-        val modes = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)
-        val hasOis = modes?.contains(CameraCharacteristics.LENS_OPTICAL_STABILIZATION_MODE_ON) == true
-
-        val type = if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
-            "Front"
-        } else {
-            when {
-                fl > 0f && fl < 3.8f -> "Ultrawide"
-                fl >= 3.8f && fl < 7.5f -> "Main"
-                fl >= 7.5f -> "Telephoto"
-                else -> "Main"
-            }
+        if (pixelSpecs != null) {
+            return CameraSpecs(
+                backCameras = pixelSpecs.filter { !it.type.startsWith("Front") },
+                frontCameras = pixelSpecs.filter { it.type.startsWith("Front") }
+            )
         }
 
-        return CameraLensInfo(type, mpStr, apStr, flStr, resStr, sensorStr, hasOis)
+        var onePlusSpecs: List<CameraLensInfo>? = null
+        for (name in possibleNames) {
+            onePlusSpecs = DataPlus.getSpecs(name)
+            if (onePlusSpecs != null) break
+        }
+
+        if (onePlusSpecs != null) {
+            return CameraSpecs(
+                backCameras = onePlusSpecs.filter { !it.type.startsWith("Front") },
+                frontCameras = onePlusSpecs.filter { it.type.startsWith("Front") }
+            )
+        }
+
+        return CameraSpecs(emptyList(), emptyList())
     }
 
     private fun mapApiToName(apiLevel: Int): String {
         return when (apiLevel) {
+            // 37 -> "Cinnamon Bun" -- postponed until better times
             36 -> "Baklava"
             35 -> "Vanilla Ice Cream"
             34 -> "Upside Down Cake"
             33 -> "Tiramisu"
             32 -> "Snow Cone V2"
             31 -> "Snow Cone"
-            30 -> "Red Velvet Cake"
             else -> "Legacy ($apiLevel)"
         }
     }
 
     fun getAndroidCodename(): String = mapApiToName(Build.VERSION.SDK_INT)
-
-    fun getVndkVersion(): String {
-        return getSystemProperty("ro.vndk.version").ifEmpty {
-            getSystemProperty("ro.board.api_level").ifEmpty { "Not Found" }
-        }
-    }
-
+    fun getVndkVersion(): String = getSystemProperty("ro.vndk.version").ifEmpty { getSystemProperty("ro.board.api_level") }
     fun getDeviceCodename(): String = Build.DEVICE
     fun getDeviceName(): String = "${Build.MANUFACTURER} ${Build.MODEL}".split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
 
-    fun getProcessorName(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else Build.HARDWARE.uppercase()
-    }
-
+    fun getProcessorName(): String = Build.SOC_MODEL
     fun getCpuCount(): Int = Runtime.getRuntime().availableProcessors()
     fun getArchitecture(): String = System.getProperty("os.arch") ?: "Unknown"
     fun is64Bit(): String = if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) "64-bit" else "32-bit"
@@ -252,12 +225,17 @@ object DeviceManager {
         return "${metrics.bounds.width()}x${metrics.bounds.height()}"
     }
 
-    fun getRefreshRate(context: Context): String {
-        return "${context.display?.refreshRate?.toInt() ?: 60}Hz"
-    }
-
+    fun getRefreshRate(context: Context): String = "${context.display?.refreshRate?.toInt() ?: 60}Hz"
     fun getDensity(context: Context): String = "${context.resources.displayMetrics.densityDpi} dpi"
     fun isHdrSupported(context: Context): Boolean = context.display?.isHdr == true
+
+    fun getUptime(): String {
+        val uptimeMillis = SystemClock.elapsedRealtime()
+        val days = TimeUnit.MILLISECONDS.toDays(uptimeMillis)
+        val hours = TimeUnit.MILLISECONDS.toHours(uptimeMillis) % 24
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(uptimeMillis) % 60
+        return "${days}d ${hours}h ${minutes}m"
+    }
 
     fun getRamDetails(context: Context): RamData {
         val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -275,7 +253,8 @@ object DeviceManager {
             totalGB > 10 -> 12
             totalGB > 7 -> 8
             totalGB > 5 -> 6
-            else -> 4
+            totalGB > 3 -> 4
+            else -> 3
         }
 
         val df = DecimalFormat("#.##")
@@ -287,11 +266,35 @@ object DeviceManager {
         )
     }
 
+    fun getStorageInfo(): StorageData {
+        val path = Environment.getDataDirectory()
+        val stat = StatFs(path.path)
+        val blockSize = stat.blockSizeLong
+        val totalBlocks = stat.blockCountLong
+        val availableBlocks = stat.availableBlocksLong
+
+        val totalBytes = totalBlocks * blockSize
+        val availableBytes = availableBlocks * blockSize
+        val usedBytes = totalBytes - availableBytes
+
+        val totalGB = totalBytes.toDouble() / (1024.0.pow(3.0))
+        val usedGB = usedBytes.toDouble() / (1024.0.pow(3.0))
+        val percent = if (totalBytes > 0) ((usedBytes.toDouble() / totalBytes.toDouble()) * 100).toInt() else 0
+
+        val df = DecimalFormat("#.#")
+        return StorageData(
+            total = "${df.format(totalGB)} GB",
+            used = "${df.format(usedGB)} GB",
+            percent = percent,
+            progress = percent / 100f
+        )
+    }
+
     fun getBatteryInfo(context: Context): BatteryData {
         val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) ?: 0
         val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
-        val percent = (level * 100 / scale.toFloat()).toInt()
+        val percent = if (scale > 0) (level * 100 / scale.toFloat()).toInt() else 0
 
         val status = when (intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)) {
             BatteryManager.BATTERY_STATUS_CHARGING -> "Charging"
@@ -302,14 +305,17 @@ object DeviceManager {
 
         val temp = (intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10.0
         val tech = intent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: "Li-ion"
-
         var cycles = if (Build.VERSION.SDK_INT >= 34) intent?.getIntExtra("android.os.extra.CYCLE_COUNT", -1) ?: -1 else -1
         if (cycles == -1) cycles = findValueInFiles(listOf("/sys/class/power_supply/battery/cycle_count", "/sys/class/power_supply/battery/battery_cycle")).toIntOrNull() ?: 0
 
         var cap = findValueInFiles(listOf("/sys/class/power_supply/battery/charge_full_design", "/sys/class/power_supply/battery/batt_capacity_max")).toIntOrNull()?.div(1000) ?: 0
-        if (cap <= 0) cap = (Class.forName("com.android.internal.os.PowerProfile").getConstructor(Context::class.java).newInstance(context).let {
-            it.javaClass.getMethod("getBatteryCapacity").invoke(it) as Double
-        }).toInt()
+        if (cap <= 0) {
+            try {
+                cap = (Class.forName("com.android.internal.os.PowerProfile").getConstructor(Context::class.java).newInstance(context).let {
+                    it.javaClass.getMethod("getBatteryCapacity").invoke(it) as Double
+                }).toInt()
+            } catch (_: Exception) {}
+        }
 
         return BatteryData("$percent%", status, "$temp°C", tech, if (cap > 0) "$cap mAh" else "Unknown", if (cycles > 0) "$cycles" else "—")
     }

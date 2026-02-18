@@ -1,6 +1,5 @@
 package com.silicon.ui.screens
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,41 +19,43 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.silicon.ui.components.DeviceManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 @Composable
 fun HardwareScreen() {
     val context = LocalContext.current
-    val ram = remember { DeviceManager.getRamDetails(context) }
-    val bat = remember { DeviceManager.getBatteryInfo(context) }
+
+    var ram by remember { mutableStateOf(DeviceManager.getRamDetails(context)) }
+    var bat by remember { mutableStateOf(DeviceManager.getBatteryInfo(context)) }
+
+    var storage by remember { mutableStateOf(DeviceManager.getStorageInfo()) }
+
+    var gpuData by remember { mutableStateOf(DeviceManager.GpuData("Loading...", "...", "...", "...")) }
+
     val resolution = remember { DeviceManager.getResolution(context) }
-    val gpuData = remember { DeviceManager.getGpuDetails() }
     val refreshRate = remember { DeviceManager.getRefreshRate(context) }
     val density = remember { DeviceManager.getDensity(context) }
     val isHdr = remember { DeviceManager.isHdrSupported(context) }
     val cameraSpecs = remember { DeviceManager.getCameraSpecs(context) }
 
-    val sharedPref = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
-    val shouldShowWarning = remember { mutableStateOf(sharedPref.getBoolean("camera_beta_warning", true)) }
-
-    if (shouldShowWarning.value) {
-        AlertDialog(
-            onDismissRequest = { },
-            icon = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
-            title = { Text("Warning!") },
-            text = {
-                Text("Camera information is currently in BETA. \n\nThe hardware detection algorithm may not be 100% accurate on all devices yet.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        sharedPref.edit().putBoolean("camera_beta_warning", false).apply()
-                        shouldShowWarning.value = false
-                    }
-                ) {
-                    Text("Got it")
-                }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val data = DeviceManager.getGpuDetails()
+            withContext(Dispatchers.Main) {
+                gpuData = data
             }
-        )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            ram = DeviceManager.getRamDetails(context)
+            bat = DeviceManager.getBatteryInfo(context)
+            delay(1000)
+        }
     }
 
     Column(
@@ -73,31 +74,32 @@ fun HardwareScreen() {
             )
         }
 
-        HardwareSectionGroup(title = "Camera", icon = Icons.Default.CameraAlt) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                if (cameraSpecs.backCameras.isNotEmpty()) {
+        if (cameraSpecs.backCameras.isNotEmpty()) {
+            HardwareSectionGroup(title = "Camera", icon = Icons.Default.CameraAlt) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     cameraSpecs.backCameras.forEachIndexed { index, cam ->
                         CameraLensRow(cam)
                         if (index < cameraSpecs.backCameras.lastIndex) {
                             GpuDivider()
                         }
                     }
-                } else {
-                    Text("No back cameras detected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
 
-                if (cameraSpecs.backCameras.isNotEmpty() && cameraSpecs.frontCameras.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp)
-                            .height(1.dp)
-                            .background(MaterialTheme.colorScheme.outlineVariant)
-                    )
-                }
+                    if (cameraSpecs.backCameras.isNotEmpty() && cameraSpecs.frontCameras.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp)
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        )
+                    }
 
-                cameraSpecs.frontCameras.forEach { cam ->
-                    CameraLensRow(cam)
+                    cameraSpecs.frontCameras.forEachIndexed { index, cam ->
+                        CameraLensRow(cam)
+                        if (index < cameraSpecs.frontCameras.lastIndex) {
+                            GpuDivider()
+                        }
+                    }
                 }
             }
         }
@@ -158,6 +160,36 @@ fun HardwareScreen() {
             }
         }
 
+        HardwareSectionGroup(title = "Storage", icon = Icons.Default.Storage) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        storage.total,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Total Space", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.height(16.dp))
+
+                LinearProgressIndicator(
+                    progress = { storage.progress },
+                    modifier = Modifier.fillMaxWidth().height(12.dp),
+                    color = MaterialTheme.colorScheme.secondary,
+                    trackColor = MaterialTheme.colorScheme.secondaryContainer,
+                    strokeCap = StrokeCap.Round,
+                )
+
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Used: ${storage.used}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("${storage.percent}%", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
         HardwareSectionGroup(title = "Battery", icon = Icons.Default.BatteryStd) {
             BatteryContent(bat)
         }
@@ -170,18 +202,18 @@ fun HardwareScreen() {
 fun HardwareSectionGroup(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
             shape = CircleShape,
             modifier = Modifier.padding(start = 4.dp)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 Spacer(Modifier.width(8.dp))
@@ -206,7 +238,7 @@ fun HardwareSectionGroup(title: String, icon: ImageVector, content: @Composable 
 
 @Composable
 fun CameraLensRow(cam: DeviceManager.CameraLensInfo) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -217,7 +249,7 @@ fun CameraLensRow(cam: DeviceManager.CameraLensInfo) {
                     text = cam.type,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (cam.type == "Main") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    color = if (cam.type.startsWith("Main")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "${cam.megapixels}, ${cam.aperture}",
@@ -228,37 +260,39 @@ fun CameraLensRow(cam: DeviceManager.CameraLensInfo) {
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (cam.hasOis) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.tertiaryContainer,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Row(modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Vibration, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                            Spacer(Modifier.width(4.dp))
-                            Text("OIS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                        }
-                    }
-                }
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = cam.focalLength,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text("OIS") },
+                        icon = { Icon(Icons.Default.Vibration, null, modifier = Modifier.size(10.dp)) },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            iconContentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        ),
+                        border = null,
+                        modifier = Modifier.height(28.dp)
                     )
                 }
+
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text(cam.focalLength) },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    border = null,
+                    modifier = Modifier.height(28.dp)
+                )
             }
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
 
         Text(
             text = "Res: ${cam.resolution} • Sensor: ${cam.sensorSize}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
     }
 }
@@ -289,12 +323,10 @@ fun GpuDetailRow(label: String, value: String) {
 
 @Composable
 fun GpuDivider() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp)
-            .height(1.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    HorizontalDivider(
+        modifier = Modifier.padding(vertical = 12.dp),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
     )
 }
 
@@ -318,7 +350,8 @@ fun HardwareContent(value: String, tags: List<String>) {
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         labelColor = MaterialTheme.colorScheme.onSecondaryContainer
                     ),
-                    border = null
+                    border = null,
+                    modifier = Modifier.height(32.dp)
                 )
             }
         }

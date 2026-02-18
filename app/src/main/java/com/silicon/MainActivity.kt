@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.google.android.material.color.DynamicColors
 import com.silicon.ui.components.AppAnimations
 import com.silicon.ui.screens.AndroidScreen
 import com.silicon.ui.screens.HardwareScreen
@@ -37,19 +39,25 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         enableEdgeToEdge()
+
         super.onCreate(savedInstanceState)
 
         setContent {
             SiliconTheme(dynamicColor = true) {
+
                 val navController = rememberNavController()
-                var currentTab by remember { mutableIntStateOf(0) }
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route ?: "Dashboard"
 
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
                 val haptic = LocalHapticFeedback.current
 
                 Scaffold(
-                    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection),
                     containerColor = MaterialTheme.colorScheme.background,
+
                     topBar = {
                         LargeTopAppBar(
                             title = {
@@ -65,6 +73,7 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                     },
+
                     bottomBar = {
                         NavigationBar(
                             containerColor = MaterialTheme.colorScheme.background,
@@ -75,7 +84,7 @@ class MainActivity : ComponentActivity() {
                             val unselectedIcons = listOf(Icons.Outlined.Dashboard, Icons.Outlined.Memory, Icons.Outlined.PhoneAndroid)
 
                             items.forEachIndexed { index, item ->
-                                val isSelected = currentTab == index
+                                val isSelected = currentRoute == item
                                 NavigationBarItem(
                                     icon = {
                                         Icon(
@@ -88,8 +97,7 @@ class MainActivity : ComponentActivity() {
                                     onClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
 
-                                        if (currentTab != index) {
-                                            currentTab = index
+                                        if (currentRoute != item) {
                                             navController.navigate(item) {
                                                 popUpTo("Dashboard") { saveState = true }
                                                 launchSingleTop = true
@@ -103,7 +111,7 @@ class MainActivity : ComponentActivity() {
                     }
                 ) { innerPadding ->
                     NavHost(
-                        navController,
+                        navController = navController,
                         startDestination = "Dashboard",
                         modifier = Modifier.padding(innerPadding)
                     ) {
@@ -119,13 +127,17 @@ class MainActivity : ComponentActivity() {
                             "Hardware",
                             enterTransition = { AppAnimations.enterTransition(1, initialState.destination.route?.toTabIndex() ?: 0) },
                             exitTransition = { AppAnimations.exitTransition(targetState.destination.route?.toTabIndex() ?: 0, 1) }
-                        ) { HardwareScreen() }
+                        ) {
+                            HardwareScreen()
+                        }
 
                         composable(
                             "Android",
                             enterTransition = { AppAnimations.enterTransition(2, initialState.destination.route?.toTabIndex() ?: 0) },
                             exitTransition = { AppAnimations.exitTransition(targetState.destination.route?.toTabIndex() ?: 0, 2) }
-                        ) { AndroidScreen() }
+                        ) {
+                            AndroidScreen()
+                        }
                     }
                 }
             }
