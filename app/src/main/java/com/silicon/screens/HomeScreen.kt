@@ -69,6 +69,47 @@ fun HomeScreen(paddingValues: PaddingValues) {
         BurnScreen(onDismiss = { isBurnScreenVisible = false })
     }
 
+    if (showUpdateDialog && updateState is UpdateManager.UpdateState.Available) {
+        val updateInfo = (updateState as UpdateManager.UpdateState.Available).info
+
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null) },
+            title = { Text("Update Available: ${updateInfo.version}") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text("New version available!", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Changelog:", fontWeight = FontWeight.Bold)
+
+                    Text(
+                        text = updateInfo.changelog,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showUpdateDialog = false
+                        UpdateManager.downloadAndInstall(
+                            context,
+                            updateInfo.downloadUrl,
+                            "Silicon_${updateInfo.version}.apk"
+                        )
+                    }
+                ) { Text("Download") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) { Text("Later") }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
         snackbarHost = {
