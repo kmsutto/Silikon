@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="ic_launcher_background">@color/ic_launcher_background_themed</color>
-
-    <color name="ic_launcher_foreground_themed">@color/material_dynamic_primary30</color>
-    <color name="ic_launcher_background_themed">@color/material_dynamic_secondary80</color>
-</resources>
