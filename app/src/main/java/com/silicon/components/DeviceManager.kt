@@ -10,6 +10,8 @@ import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.os.SystemClock
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Log
 import android.view.WindowManager
 import android.view.WindowMetrics
@@ -19,6 +21,9 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.FileReader
 import java.io.InputStreamReader
+import java.security.KeyPairGenerator
+import java.security.KeyStore
+import java.security.cert.X509Certificate
 import java.text.DecimalFormat
 import java.util.concurrent.TimeUnit
 import javax.microedition.khronos.egl.EGL10
@@ -101,37 +106,41 @@ object DeviceManager {
         }
     }
 
-    fun getBootloaderStatus(): String {
-        val state = getSystemProperty("ro.boot.verifiedbootstate")
-        return when (state) {
-            "green" -> "Locked"
-            "yellow" -> "Signatures"
-            "orange" -> "Unlocked"
-            "red" -> "Warning"
-            else -> {
-                val locked = getSystemProperty("ro.boot.flash.locked")
-                when (locked) {
-                    "1" -> "Locked"
-                    "0" -> "Unlocked"
-                    else -> if (state.isNotEmpty()) state.replaceFirstChar { it.uppercase() } else "Unknown"
-                }
+    fun getBootloaderStatus(context: Context): String {
+        val customRomPackages = listOf(
+            "org.evolution.settings",
+            "com.evolution.settings",
+            "org.lineageos.settings",
+            "org.lineageos.updater",
+            "com.crdroid.settings",
+            "org.pixelexperience.updater",
+            "com.paranoid.settings"
+        )
+
+        val pm = context.packageManager
+        for (pkg in customRomPackages) {
+            try {
+                pm.getPackageInfo(pkg, 0)
+                return "Unlocked"
+            } catch (e: Exception) {
             }
         }
-    }
 
-    fun getIntegrityPrediction(): String {
-        val blStatus = getBootloaderStatus()
-        val isRoot = isRooted()
+        val flavor = getSystemProperty("ro.build.flavor").lowercase()
+        val host = getSystemProperty("ro.build.host").lowercase()
+        val user = getSystemProperty("ro.build.user").lowercase()
+
+        if (flavor.contains("evolution") || host.contains("evolution") || user.contains("evolution") || flavor.contains("lineage")) {
+            return "Unlocked)"
+        }
+
+        val state = getSystemProperty("ro.boot.verifiedbootstate")
+        val locked = getSystemProperty("ro.boot.flash.locked")
 
         return when {
-            blStatus.contains("Unlocked", ignoreCase = true) -> "Unlikely"
-            blStatus.contains("Warning", ignoreCase = true) -> "Unlikely"
-            isRoot -> "Unlikely (Root Detected)"
-
-            blStatus == "Locked" -> "Meets Basic & Strong"
-            blStatus.contains("Custom Key") -> "Meets Basic Integrity"
-
-            else -> "Unknown Prediction"
+            state == "orange" || locked == "0" -> "Unlocked"
+            state == "green" || locked == "1" -> "Locked"
+            else -> "Unknown"
         }
     }
 
@@ -199,7 +208,6 @@ object DeviceManager {
 
     private fun mapApiToName(apiLevel: Int): String {
         return when (apiLevel) {
-            // 37 -> "Cinnamon Bun" -- postponed until better times
             36 -> "Baklava"
             35 -> "Vanilla Ice Cream"
             34 -> "Upside Down Cake"
