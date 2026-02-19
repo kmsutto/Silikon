@@ -23,18 +23,28 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.silicon.ui.components.DeviceManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun AndroidScreen() {
     val context = LocalContext.current
 
-    val isRooted = remember { DeviceManager.isRooted() }
     val patch = remember { DeviceManager.getSecurityPatch() }
-    val bootloader = remember { DeviceManager.getBootloaderStatus() }
-    val integrity = remember { DeviceManager.getIntegrityPrediction() }
+
+    var isRooted by remember { mutableStateOf(false) }
+    var bootloader by remember { mutableStateOf("Checking hardware...") }
+    var integrity by remember { mutableStateOf("Evaluating...") }
 
     var clickCount by remember { mutableIntStateOf(0) }
     var lastClickTime by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            isRooted = DeviceManager.isRooted()
+            bootloader = DeviceManager.getBootloaderStatus(context)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -84,10 +94,8 @@ fun AndroidScreen() {
                 icon = Icons.Default.Shield,
                 label = "Root Access",
                 value = if (isRooted) "Detected" else "Not Detected",
-                showDivider = true
+                showDivider = false
             )
-
-            InfoRow(Icons.Default.VerifiedUser, "Play Integrity", integrity, false)
         }
 
         AndroidSectionGroup(title = "Treble", icon = Icons.Default.Layers) {
