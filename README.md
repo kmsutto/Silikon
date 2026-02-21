@@ -4,7 +4,7 @@ This is a simple mini-utility for checking basic information about a device, for
 
 ## Features
 - Simple MD3E design
-- Support from Android 11 to Android 16
+- Support from Android 12 to Android 16
 - Takes up little space
 
 ## Build App
