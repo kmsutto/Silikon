@@ -10,57 +10,36 @@ import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.os.SystemClock
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import android.util.Log
 import android.view.WindowManager
 import android.view.WindowMetrics
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import com.silicon.ui.components.database.DataPixel
 import com.silicon.ui.components.database.DataPlus
+import com.silicon.ui.components.database.DataSamsung
+import com.silicon.ui.components.database.DataXiaomi
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileReader
 import java.io.InputStreamReader
+import java.text.DecimalFormat
+import java.util.concurrent.TimeUnit
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.cert.X509Certificate
-import java.text.DecimalFormat
-import java.util.concurrent.TimeUnit
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import kotlin.math.pow
 
 object DeviceManager {
-
     data class RamData(val total: String, val used: String, val free: String, val progress: Float)
-
-    data class BatteryData(
-        val level: String, val status: String, val temp: String, val technology: String, val capacity: String, val cycles: String
-    )
-
-    data class StorageData(
-        val total: String, val used: String, val percent: Int, val progress: Float
-    )
-
-    data class GpuData(
-        val renderer: String, val vendor: String, val version: String, val extensionsCount: String
-    )
-
-    data class CameraLensInfo(
-        val type: String,
-        val megapixels: String,
-        val aperture: String,
-        val focalLength: String,
-        val resolution: String,
-        val sensorSize: String,
-        val hasOis: Boolean
-    )
-
-    data class CameraSpecs(
-        val backCameras: List<CameraLensInfo>,
-        val frontCameras: List<CameraLensInfo>
-    )
+    data class BatteryData(val level: String, val status: String, val voltage: String, val temp: String, val technology: String, val capacity: String, val cycles: String, val percentInt: Int, val estimatedCapacity: Int)
+    data class StorageData(val total: String, val used: String, val percent: Int, val progress: Float)
+    data class GpuData(val renderer: String, val vendor: String, val version: String, val extensionsCount: String)
+    data class CameraLensInfo(val type: String, val megapixels: String, val aperture: String, val focalLength: String, val resolution: String, val sensorSize: String, val hasOis: Boolean)
+    data class CameraSpecs(val backCameras: List<CameraLensInfo>, val frontCameras: List<CameraLensInfo>)
+    data class PartitionData(val mountPoint: String, val fsType: String, val total: String, val used: String, val percent: Int, val progress: Float)
 
     private var cachedGpuData: GpuData? = null
 
@@ -83,70 +62,55 @@ object DeviceManager {
         return ""
     }
 
+    private fun mapApiToName(apiLevel: Int): String {
+        return when (apiLevel) {
+            36 -> "Baklava"
+            35 -> "Vanilla Ice Cream"
+            34 -> "Upside Down Cake"
+            33 -> "Tiramisu"
+            32 -> "Snow Cone V2"
+            31 -> "Snow Cone"
+            else -> "Legacy ($apiLevel)"
+        }
+    }
+
+    fun getAndroidVersion(): String = Build.VERSION.RELEASE
+    fun getSdkVersion(): String = Build.VERSION.SDK_INT.toString()
+    fun getAndroidCodename(): String = mapApiToName(Build.VERSION.SDK_INT)
     fun getSecurityPatch(): String = Build.VERSION.SECURITY_PATCH
+    fun getKernelVersion(): String = System.getProperty("os.version") ?: "Unavailable"
+    fun getBuildNumber(): String = Build.DISPLAY
+    fun getFingerprint(): String = Build.FINGERPRINT
+    fun isTrebleSupported(): String = if (getSystemProperty("ro.treble.enabled", "false") == "true") "Yes" else "No"
+    fun isABUpdateSupported(): String = if (getSystemProperty("ro.build.ab_update", "false") == "true") "Yes" else "No"
+    fun getVndkVersion(): String = getSystemProperty("ro.vndk.version").ifEmpty { getSystemProperty("ro.board.api_level") }
 
-    fun isRooted(): Boolean {
-        val buildTags = Build.TAGS
-        if (buildTags != null && buildTags.contains("test-keys")) return true
-
-        val paths = arrayOf(
-            "/system/app/Superuser.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su",
-            "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su",
-            "/system/bin/failsafe/su", "/data/local/su", "/su/bin/su",
-            "/data/adb/magisk", "/sbin/magisk", "/system/xbin/daemonsu"
-        )
-        if (paths.any { File(it).exists() }) return true
-
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("which", "su"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            reader.readLine() != null
-        } catch (t: Throwable) {
-            false
-        }
+    fun getUptime(): String {
+        val uptimeMillis = SystemClock.elapsedRealtime()
+        val days = TimeUnit.MILLISECONDS.toDays(uptimeMillis)
+        val hours = TimeUnit.MILLISECONDS.toHours(uptimeMillis) % 24
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(uptimeMillis) % 60
+        return "${days}d ${hours}h ${minutes}m"
     }
 
-    fun getBootloaderStatus(context: Context): String {
-        val customRomPackages = listOf(
-            "org.evolution.settings",
-            "com.evolution.settings",
-            "org.lineageos.settings",
-            "org.lineageos.updater",
-            "com.crdroid.settings",
-            "org.pixelexperience.updater",
-            "com.paranoid.settings"
-        )
+    fun getDeviceCodename(): String = Build.DEVICE
+    fun getDeviceName(): String = "${Build.MANUFACTURER} ${Build.MODEL}".split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+    fun getProcessorName(): String = Build.SOC_MODEL
+    fun getCpuCount(): Int = Runtime.getRuntime().availableProcessors()
+    fun getArchitecture(): String = System.getProperty("os.arch") ?: "Unknown"
+    fun is64Bit(): String = if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) "64-bit" else "32-bit"
 
-        val pm = context.packageManager
-        for (pkg in customRomPackages) {
-            try {
-                pm.getPackageInfo(pkg, 0)
-                return "Unlocked"
-            } catch (e: Exception) {
-            }
-        }
-
-        val flavor = getSystemProperty("ro.build.flavor").lowercase()
-        val host = getSystemProperty("ro.build.host").lowercase()
-        val user = getSystemProperty("ro.build.user").lowercase()
-
-        if (flavor.contains("evolution") || host.contains("evolution") || user.contains("evolution") || flavor.contains("lineage")) {
-            return "Unlocked)"
-        }
-
-        val state = getSystemProperty("ro.boot.verifiedbootstate")
-        val locked = getSystemProperty("ro.boot.flash.locked")
-
-        return when {
-            state == "orange" || locked == "0" -> "Unlocked"
-            state == "green" || locked == "1" -> "Locked"
-            else -> "Unknown"
-        }
+    fun getResolution(context: Context): String {
+        val metrics: WindowMetrics = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).currentWindowMetrics
+        return "${metrics.bounds.width()}x${metrics.bounds.height()}"
     }
+
+    fun getRefreshRate(context: Context): String = "${context.display?.refreshRate?.toInt() ?: 60}Hz"
+    fun getDensity(context: Context): String = "${context.resources.displayMetrics.densityDpi} dpi"
+    fun isHdrSupported(context: Context): Boolean = context.display?.isHdr == true
 
     fun getGpuDetails(): GpuData {
         if (cachedGpuData != null) return cachedGpuData!!
-
         var renderer = "Unknown"; var vendor = "Unknown"; var version = "Unknown"; var extensions = "0"
         try {
             val egl = EGLContext.getEGL() as EGL10
@@ -169,7 +133,7 @@ object DeviceManager {
             extensions = (GLES20.glGetString(GLES20.GL_EXTENSIONS)?.split(" ")?.size ?: 0).toString()
 
             egl.eglDestroySurface(display, eglSurface); egl.eglDestroyContext(display, eglContext); egl.eglTerminate(display)
-        } catch (e: Exception) { Log.e("Silicon", "GPU Error: ${e.message}") }
+        } catch (_: Exception) { }
 
         return GpuData(renderer, vendor, version, extensions).also { cachedGpuData = it }
     }
@@ -203,46 +167,33 @@ object DeviceManager {
             )
         }
 
-        return CameraSpecs(emptyList(), emptyList())
-    }
-
-    private fun mapApiToName(apiLevel: Int): String {
-        return when (apiLevel) {
-            36 -> "Baklava"
-            35 -> "Vanilla Ice Cream"
-            34 -> "Upside Down Cake"
-            33 -> "Tiramisu"
-            32 -> "Snow Cone V2"
-            31 -> "Snow Cone"
-            else -> "Legacy ($apiLevel)"
+        var xiaomiSpecs: List<CameraLensInfo>? = null
+        for (name in possibleNames) {
+            xiaomiSpecs = DataXiaomi.getSpecs(name)
+            if (xiaomiSpecs != null) break
         }
-    }
 
-    fun getAndroidCodename(): String = mapApiToName(Build.VERSION.SDK_INT)
-    fun getVndkVersion(): String = getSystemProperty("ro.vndk.version").ifEmpty { getSystemProperty("ro.board.api_level") }
-    fun getDeviceCodename(): String = Build.DEVICE
-    fun getDeviceName(): String = "${Build.MANUFACTURER} ${Build.MODEL}".split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+        if (xiaomiSpecs != null) {
+            return CameraSpecs(
+                backCameras = xiaomiSpecs.filter { !it.type.startsWith("Front") },
+                frontCameras = xiaomiSpecs.filter { it.type.startsWith("Front") }
+            )
+        }
 
-    fun getProcessorName(): String = Build.SOC_MODEL
-    fun getCpuCount(): Int = Runtime.getRuntime().availableProcessors()
-    fun getArchitecture(): String = System.getProperty("os.arch") ?: "Unknown"
-    fun is64Bit(): String = if (Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()) "64-bit" else "32-bit"
+        var samsungSpecs: List<CameraLensInfo>? = null
+        for (name in possibleNames) {
+            samsungSpecs = DataSamsung.getSpecs(name)
+            if (samsungSpecs != null) break
+        }
 
-    fun getResolution(context: Context): String {
-        val metrics: WindowMetrics = (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).currentWindowMetrics
-        return "${metrics.bounds.width()}x${metrics.bounds.height()}"
-    }
+        if (samsungSpecs != null) {
+            return CameraSpecs(
+                backCameras = samsungSpecs.filter { !it.type.startsWith("Front") },
+                frontCameras = samsungSpecs.filter { it.type.startsWith("Front") }
+            )
+        }
 
-    fun getRefreshRate(context: Context): String = "${context.display?.refreshRate?.toInt() ?: 60}Hz"
-    fun getDensity(context: Context): String = "${context.resources.displayMetrics.densityDpi} dpi"
-    fun isHdrSupported(context: Context): Boolean = context.display?.isHdr == true
-
-    fun getUptime(): String {
-        val uptimeMillis = SystemClock.elapsedRealtime()
-        val days = TimeUnit.MILLISECONDS.toDays(uptimeMillis)
-        val hours = TimeUnit.MILLISECONDS.toHours(uptimeMillis) % 24
-        val minutes = TimeUnit.MILLISECONDS.toMinutes(uptimeMillis) % 60
-        return "${days}d ${hours}h ${minutes}m"
+        return CameraSpecs(emptyList(), emptyList())
     }
 
     fun getRamDetails(context: Context): RamData {
@@ -255,19 +206,10 @@ object DeviceManager {
         val usedBytes = totalBytes - availBytes
 
         val totalGB = totalBytes.toDouble() / (1024.0.pow(3.0))
-        val marketingTotal = when {
-            totalGB > 20 -> 24
-            totalGB > 14 -> 16
-            totalGB > 10 -> 12
-            totalGB > 7 -> 8
-            totalGB > 5 -> 6
-            totalGB > 3 -> 4
-            else -> 3
-        }
 
         val df = DecimalFormat("#.##")
         return RamData(
-            total = "$marketingTotal GB",
+            total = "${df.format(totalGB)} GB",
             used = "${df.format(usedBytes / (1024.0.pow(3.0)))} GB",
             free = "${df.format(availBytes / (1024.0.pow(3.0)))} GB",
             progress = usedBytes.toFloat() / totalBytes.toFloat()
@@ -298,6 +240,70 @@ object DeviceManager {
         )
     }
 
+    fun getDiskPartitions(): List<PartitionData> {
+        val partitions = mutableListOf<PartitionData>()
+        val df = DecimalFormat("#.##")
+        try {
+            val file = File("/proc/mounts")
+            if (file.exists() && file.canRead()) {
+                val reader = BufferedReader(FileReader(file))
+                val seenMounts = mutableSetOf<String>()
+
+                val allowedMounts = listOf(
+                    "/", "/system", "/system_ext", "/product", "/vendor", "/vendor_dlkm",
+                    "/boot", "/recovery", "/efs", "/persist",
+                    "/firmware", "/sbl1", "/sbl2", "/sbl3", "/aboot",
+                    "/rpm", "/tz", "/keymaster", "/splash", "/chglogo",
+                    "/odm", "/odm_dlkm", "/cache", "/metadata",
+                )
+
+                reader.forEachLine { line ->
+                    val parts = line.split(" ")
+                    if (parts.size >= 3) {
+                        val mountPoint = parts[1]
+                        val fsType = parts[2]
+
+                        if (allowedMounts.contains(mountPoint) && !seenMounts.contains(mountPoint)) {
+                            try {
+                                val stat = StatFs(mountPoint)
+                                val blockSize = stat.blockSizeLong
+                                val totalBlocks = stat.blockCountLong
+                                val availableBlocks = stat.availableBlocksLong
+
+                                if (totalBlocks > 0) {
+                                    val totalBytes = totalBlocks * blockSize
+                                    val availableBytes = availableBlocks * blockSize
+                                    val usedBytes = totalBytes - availableBytes
+
+                                    val totalGB = totalBytes.toDouble() / (1024.0.pow(3.0))
+                                    val usedGB = usedBytes.toDouble() / (1024.0.pow(3.0))
+                                    val percent = ((usedBytes.toDouble() / totalBytes.toDouble()) * 100).toInt()
+
+                                    val totalStr = if (totalGB >= 1.0) "${df.format(totalGB)} GB" else "${df.format(totalBytes.toDouble() / (1024.0.pow(2.0)))} MB"
+                                    val usedStr = if (usedGB >= 1.0) "${df.format(usedGB)} GB" else "${df.format(usedBytes.toDouble() / (1024.0.pow(2.0)))} MB"
+
+                                    partitions.add(
+                                        PartitionData(
+                                            mountPoint = mountPoint,
+                                            fsType = fsType,
+                                            total = totalStr,
+                                            used = usedStr,
+                                            percent = percent,
+                                            progress = percent / 100f
+                                        )
+                                    )
+                                    seenMounts.add(mountPoint)
+                                }
+                            } catch (_: Exception) { }
+                        }
+                    }
+                }
+                reader.close()
+            }
+        } catch (_: Exception) { }
+        return partitions.sortedByDescending { it.percent }
+    }
+
     fun getBatteryInfo(context: Context): BatteryData {
         val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) ?: 0
@@ -319,19 +325,122 @@ object DeviceManager {
         var cap = findValueInFiles(listOf("/sys/class/power_supply/battery/charge_full_design", "/sys/class/power_supply/battery/batt_capacity_max")).toIntOrNull()?.div(1000) ?: 0
         if (cap <= 0) {
             try {
-                cap = (Class.forName("com.android.internal.os.PowerProfile").getConstructor(Context::class.java).newInstance(context).let {
-                    it.javaClass.getMethod("getBatteryCapacity").invoke(it) as Double
-                }).toInt()
+                val powerProfileClass = Class.forName("com.android.internal.os.PowerProfile")
+                val powerProfile = powerProfileClass.getConstructor(Context::class.java).newInstance(context)
+                cap = (powerProfileClass.getMethod("getBatteryCapacity").invoke(powerProfile) as Double).toInt()
             } catch (_: Exception) {}
         }
 
-        return BatteryData("$percent%", status, "$temp°C", tech, if (cap > 0) "$cap mAh" else "Unknown", if (cycles > 0) "$cycles" else "—")
+        val voltageMv = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+        val voltageStr = String.format(java.util.Locale.US, "%.1f V", if (voltageMv > 100) voltageMv / 1000f else voltageMv.toFloat())
+
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val chargeCounter = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) / 1000
+        val estimatedCapacity = if (percent > 0) (chargeCounter * 100) / percent else 0
+
+        return BatteryData("$percent%", status, voltageStr, "$temp°C", tech, if (cap > 0) "$cap mAh" else "Unknown", if (cycles > 0) "$cycles" else "—", percent, estimatedCapacity)
     }
 
-    fun getAndroidVersion(): String = Build.VERSION.RELEASE
-    fun getSdkVersion(): String = Build.VERSION.SDK_INT.toString()
-    fun getKernelVersion(): String = System.getProperty("os.version") ?: "Unavailable"
-    fun getBuildNumber(): String = Build.DISPLAY
-    fun getFingerprint(): String = Build.FINGERPRINT
-    fun isTrebleSupported(): String = if (getSystemProperty("ro.treble.enabled", "false") == "true") "Yes" else "No"
+    fun isRooted(): Boolean {
+        val buildTags = Build.TAGS
+        if (buildTags != null && buildTags.contains("test-keys")) return true
+
+        val paths = arrayOf(
+            "/system/app/Superuser.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su",
+            "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su",
+            "/system/bin/failsafe/su", "/data/local/su", "/su/bin/su",
+            "/data/adb/magisk", "/sbin/magisk", "/system/xbin/daemonsu"
+        )
+        if (paths.any { File(it).exists() }) return true
+
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("which", "su"))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            reader.readLine() != null
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    fun getBootloaderStatus(): String {
+        return try {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore")
+            keyStore.load(null)
+
+            val alias = "SiliconBootloaderCheck"
+            if (keyStore.containsAlias(alias)) {
+                keyStore.deleteEntry(alias)
+            }
+
+            val keyPairGenerator = KeyPairGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore"
+            )
+
+            val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
+                .setAttestationChallenge("silicon_challenge".toByteArray())
+                .setDigests(KeyProperties.DIGEST_SHA256)
+
+            keyPairGenerator.initialize(builder.build())
+            keyPairGenerator.generateKeyPair()
+
+            val certificateChain = keyStore.getCertificateChain(alias)
+            val cert = certificateChain[0] as X509Certificate
+
+            val attestationExtensionOid = "1.3.6.1.4.1.11129.2.1.17"
+            val extensionValue = cert.getExtensionValue(attestationExtensionOid)
+
+            if (extensionValue != null) {
+                when (parseDeviceLockedFromAsn1(extensionValue)) {
+                    true -> "Locked"
+                    false -> "Unlocked"
+                    null -> "Unknown"
+                }
+            } else {
+                "Unknown"
+            }
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    private fun parseDeviceLockedFromAsn1(extensionValue: ByteArray): Boolean? {
+        try {
+            val rootOfTrustTag = byteArrayOf(0xBF.toByte(), 0x85.toByte(), 0x40.toByte())
+            for (i in 0 until extensionValue.size - 5) {
+                if (extensionValue[i] == rootOfTrustTag[0] &&
+                    extensionValue[i + 1] == rootOfTrustTag[1] &&
+                    extensionValue[i + 2] == rootOfTrustTag[2]
+                ) {
+                    var offset = i + 3
+                    var length = extensionValue[offset++].toInt() and 0xFF
+                    if (length >= 128) offset += (length and 0x7F)
+
+                    if (extensionValue[offset] == 0x30.toByte()) {
+                        offset++
+                        var seqLen = extensionValue[offset++].toInt() and 0xFF
+                        if (seqLen >= 128) offset += (seqLen and 0x7F)
+                    }
+
+                    if (extensionValue[offset++] != 0x04.toByte()) continue
+                    var keyLen = extensionValue[offset++].toInt() and 0xFF
+                    if (keyLen >= 128) {
+                        val numBytes = keyLen and 0x7F
+                        keyLen = 0
+                        for (j in 0 until numBytes) {
+                            keyLen = (keyLen shl 8) or (extensionValue[offset++].toInt() and 0xFF)
+                        }
+                    }
+                    offset += keyLen
+
+                    if (extensionValue[offset++] == 0x01.toByte()) {
+                        val boolLen = extensionValue[offset++].toInt() and 0xFF
+                        if (boolLen == 1) {
+                            return extensionValue[offset].toInt() != 0
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) { }
+        return null
+    }
 }

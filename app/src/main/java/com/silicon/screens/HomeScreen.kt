@@ -13,37 +13,27 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.silicon.ui.components.DeviceManager
 import com.silicon.ui.components.ToolsManager
-import com.silicon.ui.components.UpdateManager
-import com.silicon.ui.screens.BurnScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(paddingValues: PaddingValues) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var updateState by remember { mutableStateOf<UpdateManager.UpdateState>(UpdateManager.UpdateState.Checking) }
-    var showUpdateDialog by remember { mutableStateOf(false) }
-
     var isBurnScreenVisible by remember { mutableStateOf(false) }
     var isVibrating by remember { mutableStateOf(false) }
-
-    fun checkUpdates() {
-        scope.launch {
-            updateState = UpdateManager.UpdateState.Checking
-            val result = UpdateManager.checkForUpdates()
-            updateState = result
-            if (result is UpdateManager.UpdateState.Available) showUpdateDialog = true
-        }
-    }
+    var showAccelerometerSheet by remember { mutableStateOf(false) }
 
     fun startVibration() {
         if (isVibrating) return
@@ -52,10 +42,7 @@ fun HomeScreen(paddingValues: PaddingValues) {
 
         scope.launch {
             snackbarHostState.currentSnackbarData?.dismiss()
-            snackbarHostState.showSnackbar(
-                message = "Testing Vibration motor...",
-                duration = SnackbarDuration.Short
-            )
+            snackbarHostState.showSnackbar(message = "Testing Vibration motor...", duration = SnackbarDuration.Short)
         }
         scope.launch {
             delay(5000)
@@ -63,66 +50,14 @@ fun HomeScreen(paddingValues: PaddingValues) {
         }
     }
 
-    LaunchedEffect(Unit) { checkUpdates() }
-
-    if (isBurnScreenVisible) {
-        BurnScreen(onDismiss = { isBurnScreenVisible = false })
-    }
-
-    if (showUpdateDialog && updateState is UpdateManager.UpdateState.Available) {
-        val updateInfo = (updateState as UpdateManager.UpdateState.Available).info
-
-        AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
-            icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null) },
-            title = { Text("Update Available: ${updateInfo.version}") },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .heightIn(max = 300.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Text("New version available!", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Changelog:", fontWeight = FontWeight.Bold)
-
-                    Text(
-                        text = updateInfo.changelog,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showUpdateDialog = false
-                        UpdateManager.downloadAndInstall(
-                            context,
-                            updateInfo.downloadUrl,
-                            "Silicon_${updateInfo.version}.apk"
-                        )
-                    }
-                ) { Text("Download") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUpdateDialog = false }) { Text("Later") }
-            }
-        )
-    }
+    if (isBurnScreenVisible) BurnScreen(onDismiss = { isBurnScreenVisible = false })
 
     Scaffold(
         containerColor = Color.Transparent,
         snackbarHost = {
             SnackbarHost(snackbarHostState) { data ->
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(bottom = 30.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shadowElevation = 6.dp
-                    ) {
+                Box(modifier = Modifier.fillMaxSize().padding(bottom = 30.dp), contentAlignment = Alignment.BottomCenter) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, shadowElevation = 6.dp) {
                         Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Vibration, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
                             Spacer(Modifier.width(12.dp))
@@ -134,49 +69,51 @@ fun HomeScreen(paddingValues: PaddingValues) {
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(innerPadding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SectionHeader(icon = Icons.Default.Dashboard, title = "Overview")
-            DashboardCard(Icons.Default.Smartphone, DeviceManager.getDeviceName(), "Looks Good!", DeviceManager.getDeviceCodename(), true, enabled = !isVibrating)
-
-            val updateData = when (val state = updateState) {
-                is UpdateManager.UpdateState.Checking -> UpdateCardModel(Icons.Default.Refresh, "Updates", "Checking...", "Wait...", false, null)
-                is UpdateManager.UpdateState.UpToDate -> UpdateCardModel(Icons.Default.CheckCircle, "Updates", "Up to date", "Latest", false, { checkUpdates() })
-                is UpdateManager.UpdateState.Available -> UpdateCardModel(Icons.Default.SystemUpdate, "Update Available", state.info.version, "Details", true, { showUpdateDialog = true })
-                is UpdateManager.UpdateState.Error -> UpdateCardModel(Icons.Default.Warning, "Error", "Failed", "Retry", false, { checkUpdates() })
-            }
-            DashboardCard(updateData.icon, updateData.title, updateData.subtitle, updateData.footer, updateData.isPrimary, updateData.onClick, enabled = !isVibrating)
+            DashboardCard(icon = Icons.Default.Smartphone, title = DeviceManager.getDeviceName(), subtitle = "Looks Good!", footer = DeviceManager.getDeviceCodename(), isPrimary = true, enabled = !isVibrating)
 
             Spacer(Modifier.height(4.dp))
             SectionHeader(icon = Icons.Default.Build, title = "Tools")
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ToolCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.Healing,
-                    title = "Fix Burn",
-                    subtitle = "RGB Flash",
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    onClick = { isBurnScreenVisible = true },
-                    enabled = !isVibrating
-                )
+                ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Healing, title = "Fix Burn", subtitle = "RGB Flash", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { isBurnScreenVisible = true }, enabled = !isVibrating)
+                ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Vibration, title = "Vibration", subtitle = if (isVibrating) "Testing..." else "Test Motor", containerColor = MaterialTheme.colorScheme.surfaceContainer, onClick = { startVibration() }, enabled = !isVibrating, isActive = isVibrating)
+            }
 
-                ToolCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.Vibration,
-                    title = "Vibration",
-                    subtitle = if (isVibrating) "Testing..." else "Test Motor",
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    onClick = { startVibration() },
-                    enabled = !isVibrating,
-                    isActive = isVibrating
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Explore, title = "Sensors", subtitle = "Accelerometer", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { showAccelerometerSheet = true }, enabled = !isVibrating)
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+
+    if (showAccelerometerSheet) {
+        ModalBottomSheet(onDismissRequest = { showAccelerometerSheet = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            val sensorData by ToolsManager.getAccelerometerData(context).collectAsState(initial = floatArrayOf(0f, 0f, 0f))
+            val x = sensorData[0]
+            val y = sensorData[1]
+            val z = sensorData[2]
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = "Accelerometer Test", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.align(Alignment.Start).padding(bottom = 32.dp))
+                Card(
+                    modifier = Modifier.size(160.dp).graphicsLayer {
+                        rotationX = y * 6f
+                        rotationY = x * 6f
+                    },
+                    shape = RoundedCornerShape(32.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {}
+                Spacer(Modifier.height(48.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    CoordItem("X", x)
+                    CoordItem("Y", y)
+                    CoordItem("Z", z)
+                }
+                Spacer(Modifier.height(32.dp))
             }
         }
     }
@@ -214,8 +151,8 @@ fun DashboardCard(icon: ImageVector, title: String, subtitle: String, footer: St
     val contentColor = if (isPrimary) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
     Card(colors = CardDefaults.cardColors(containerColor = containerColor), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth().then(if (onClick != null && enabled) Modifier.clickable { onClick() } else Modifier)) {
         Row(modifier = Modifier.padding(20.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(16.dp), color = if(isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.size(48.dp)) {
-                Box(contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(24.dp), tint = if(isPrimary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary) }
+            Surface(shape = RoundedCornerShape(16.dp), color = if (isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.size(48.dp)) {
+                Box(contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(24.dp), tint = if (isPrimary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary) }
             }
             Spacer(Modifier.width(16.dp))
             Column {
@@ -224,5 +161,15 @@ fun DashboardCard(icon: ImageVector, title: String, subtitle: String, footer: St
                 if (footer.isNotEmpty()) { Spacer(Modifier.height(4.dp)); Text(footer, style = MaterialTheme.typography.bodySmall, color = contentColor.copy(0.6f)) }
             }
         }
+    }
+}
+
+@Composable
+fun CoordItem(label: String, value: Float) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = CircleShape, modifier = Modifier.padding(bottom = 8.dp)) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+        }
+        Text(text = value.toString(), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace), fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
     }
 }

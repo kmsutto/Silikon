@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.*
@@ -27,9 +29,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.google.android.material.color.DynamicColors
 import com.silicon.ui.components.AppAnimations
 import com.silicon.ui.screens.AndroidScreen
+import com.silicon.ui.screens.AboutScreen
 import com.silicon.ui.screens.HardwareScreen
 import com.silicon.ui.screens.HomeScreen
 import com.silicon.ui.theme.SiliconTheme
@@ -39,32 +41,35 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         enableEdgeToEdge()
-
         super.onCreate(savedInstanceState)
 
         setContent {
             SiliconTheme(dynamicColor = true) {
-
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route ?: "Dashboard"
-
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
                 val haptic = LocalHapticFeedback.current
 
                 Scaffold(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
                     containerColor = MaterialTheme.colorScheme.background,
-
                     topBar = {
                         LargeTopAppBar(
-                            title = {
-                                Text(
-                                    "Silicon",
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                            title = { Text(if (currentRoute == "About") "About" else "Silicon", fontWeight = FontWeight.SemiBold) },
+                            navigationIcon = {
+                                if (currentRoute == "About") {
+                                    IconButton(onClick = { navController.popBackStack() }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                    }
+                                }
+                            },
+                            actions = {
+                                if (currentRoute != "About") {
+                                    IconButton(onClick = { navController.navigate("About") }) {
+                                        Icon(Icons.Outlined.Info, contentDescription = "About")
+                                    }
+                                }
                             },
                             scrollBehavior = scrollBehavior,
                             colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -73,39 +78,31 @@ class MainActivity : ComponentActivity() {
                             )
                         )
                     },
-
                     bottomBar = {
-                        NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            tonalElevation = 0.dp
-                        ) {
-                            val items = listOf("Dashboard", "Hardware", "Android")
-                            val selectedIcons = listOf(Icons.Filled.Dashboard, Icons.Filled.Memory, Icons.Filled.PhoneAndroid)
-                            val unselectedIcons = listOf(Icons.Outlined.Dashboard, Icons.Outlined.Memory, Icons.Outlined.PhoneAndroid)
+                        if (currentRoute != "About") {
+                            NavigationBar(containerColor = MaterialTheme.colorScheme.background, tonalElevation = 0.dp) {
+                                val items = listOf("Dashboard", "Hardware", "Android")
+                                val selectedIcons = listOf(Icons.Filled.Dashboard, Icons.Filled.Memory, Icons.Filled.PhoneAndroid)
+                                val unselectedIcons = listOf(Icons.Outlined.Dashboard, Icons.Outlined.Memory, Icons.Outlined.PhoneAndroid)
 
-                            items.forEachIndexed { index, item ->
-                                val isSelected = currentRoute == item
-                                NavigationBarItem(
-                                    icon = {
-                                        Icon(
-                                            if (isSelected) selectedIcons[index] else unselectedIcons[index],
-                                            contentDescription = item
-                                        )
-                                    },
-                                    label = { Text(item) },
-                                    selected = isSelected,
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-
-                                        if (currentRoute != item) {
-                                            navController.navigate(item) {
-                                                popUpTo("Dashboard") { saveState = true }
-                                                launchSingleTop = true
-                                                restoreState = true
+                                items.forEachIndexed { index, item ->
+                                    val isSelected = currentRoute == item
+                                    NavigationBarItem(
+                                        icon = { Icon(if (isSelected) selectedIcons[index] else unselectedIcons[index], contentDescription = item) },
+                                        label = { Text(item) },
+                                        selected = isSelected,
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            if (currentRoute != item) {
+                                                navController.navigate(item) {
+                                                    popUpTo("Dashboard") { saveState = true }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
                                             }
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
@@ -119,25 +116,25 @@ class MainActivity : ComponentActivity() {
                             "Dashboard",
                             enterTransition = { AppAnimations.enterTransition(0, initialState.destination.route?.toTabIndex() ?: 0) },
                             exitTransition = { AppAnimations.exitTransition(targetState.destination.route?.toTabIndex() ?: 0, 0) }
-                        ) {
-                            HomeScreen(paddingValues = PaddingValues(0.dp))
-                        }
+                        ) { HomeScreen(paddingValues = PaddingValues(0.dp)) }
 
                         composable(
                             "Hardware",
                             enterTransition = { AppAnimations.enterTransition(1, initialState.destination.route?.toTabIndex() ?: 0) },
                             exitTransition = { AppAnimations.exitTransition(targetState.destination.route?.toTabIndex() ?: 0, 1) }
-                        ) {
-                            HardwareScreen()
-                        }
+                        ) { HardwareScreen() }
 
                         composable(
                             "Android",
                             enterTransition = { AppAnimations.enterTransition(2, initialState.destination.route?.toTabIndex() ?: 0) },
                             exitTransition = { AppAnimations.exitTransition(targetState.destination.route?.toTabIndex() ?: 0, 2) }
-                        ) {
-                            AndroidScreen()
-                        }
+                        ) { AndroidScreen() }
+
+                        composable(
+                            "About",
+                            enterTransition = { AppAnimations.enterTransition(3, initialState.destination.route?.toTabIndex() ?: 0) },
+                            exitTransition = { AppAnimations.exitTransition(targetState.destination.route?.toTabIndex() ?: 0, 3) }
+                        ) { AboutScreen() }
                     }
                 }
             }
@@ -148,6 +145,7 @@ class MainActivity : ComponentActivity() {
         "Dashboard" -> 0
         "Hardware" -> 1
         "Android" -> 2
+        "About" -> 3
         else -> 0
     }
 }
