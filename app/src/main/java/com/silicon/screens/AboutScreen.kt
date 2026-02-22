@@ -104,7 +104,7 @@ fun AboutScreen() {
         AboutUpdateCard(updateData)
 
         Spacer(modifier = Modifier.weight(1f))
-        Text(text = "Release", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
+        Text(text = "Release | V1.5", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
     }
 }
 
