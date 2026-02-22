@@ -8,15 +8,8 @@ import androidx.compose.ui.unit.IntOffset
 
 object AppAnimations {
 
-    private val motionSpec = spring<IntOffset>(
-        stiffness = 380f,
-        dampingRatio = 0.75f
-    )
-
-    private val scaleSpec = spring<Float>(
-        stiffness = 380f,
-        dampingRatio = 0.75f
-    )
+    private val motionSpec = spring<IntOffset>(stiffness = 380f, dampingRatio = 0.75f)
+    private val scaleSpec = spring<Float>(stiffness = 380f, dampingRatio = 0.75f)
 
     fun enterTransition(targetIndex: Int, initialIndex: Int): EnterTransition {
         val direction = if (targetIndex > initialIndex) 1 else -1

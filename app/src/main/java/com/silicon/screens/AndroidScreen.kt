@@ -29,28 +29,21 @@ import kotlinx.coroutines.withContext
 @Composable
 fun AndroidScreen() {
     val context = LocalContext.current
-
     val patch = remember { DeviceManager.getSecurityPatch() }
-
     var isRooted by remember { mutableStateOf(false) }
     var bootloader by remember { mutableStateOf("Checking hardware...") }
-    var integrity by remember { mutableStateOf("Evaluating...") }
-
     var clickCount by remember { mutableIntStateOf(0) }
     var lastClickTime by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             isRooted = DeviceManager.isRooted()
-            bootloader = DeviceManager.getBootloaderStatus(context)
+            bootloader = DeviceManager.getBootloaderStatus()
         }
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         Spacer(Modifier.height(8.dp))
@@ -63,17 +56,9 @@ fun AndroidScreen() {
                 showDivider = true,
                 onClick = {
                     val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastClickTime < 500) {
-                        clickCount++
-                    } else {
-                        clickCount = 1
-                    }
+                    if (currentTime - lastClickTime < 500) clickCount++ else clickCount = 1
                     lastClickTime = currentTime
-
-                    if (clickCount >= 6) {
-                        launchEasterEgg(context)
-                        clickCount = 0
-                    }
+                    if (clickCount >= 6) { launchEasterEgg(context); clickCount = 0 }
                 }
             )
             InfoRow(Icons.Default.Code, "SDK Level", DeviceManager.getSdkVersion(), true)
@@ -89,17 +74,12 @@ fun AndroidScreen() {
         AndroidSectionGroup(title = "Security", icon = Icons.Default.Security) {
             InfoRow(Icons.Default.Update, "Security Patch", patch, true)
             InfoRow(Icons.Default.Lock, "Bootloader", bootloader, true)
-
-            InfoRow(
-                icon = Icons.Default.Shield,
-                label = "Root Access",
-                value = if (isRooted) "Detected" else "Not Detected",
-                showDivider = false
-            )
+            InfoRow(icon = Icons.Default.Shield, label = "Root Access", value = if (isRooted) "Detected" else "Not Detected", showDivider = false)
         }
 
         AndroidSectionGroup(title = "Treble", icon = Icons.Default.Layers) {
             InfoRow(Icons.Default.ViewQuilt, "Project Treble", DeviceManager.isTrebleSupported(), true)
+            InfoRow(Icons.Default.Sync, "Seamless Updates (A/B)", DeviceManager.isABUpdateSupported(), true)
             InfoRow(Icons.Default.SystemUpdate, "VNDK Version", DeviceManager.getVndkVersion(), false)
         }
 
@@ -111,9 +91,7 @@ private fun launchEasterEgg(context: Context) {
     try {
         val eggIntent = Intent(Intent.ACTION_MAIN)
         eggIntent.setPackage("com.android.egg")
-
         val activities = context.packageManager.queryIntentActivities(eggIntent, 0)
-
         if (activities.isNotEmpty()) {
             eggIntent.setClassName("com.android.egg", activities[0].activityInfo.name)
             eggIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -131,95 +109,33 @@ private fun launchEasterEgg(context: Context) {
 @Composable
 fun AndroidSectionGroup(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-            shape = CircleShape,
-            modifier = Modifier.padding(start = 4.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+        Surface(color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f), shape = CircleShape, modifier = Modifier.padding(start = 4.dp)) {
+            Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                Text(text = title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            shape = RoundedCornerShape(24.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                content()
-            }
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) { content() }
         }
     }
 }
 
 @Composable
-fun InfoRow(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    showDivider: Boolean,
-    onClick: (() -> Unit)? = null
-) {
-    val modifier = if (onClick != null) {
-        Modifier.clickable { onClick() }
-    } else {
-        Modifier
-    }
-
+fun InfoRow(icon: ImageVector, label: String, value: String, showDivider: Boolean, onClick: (() -> Unit)? = null) {
+    val modifier = if (onClick != null) Modifier.clickable { onClick() } else Modifier
     Column(modifier = modifier) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
-            )
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(text = label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Text(text = value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-
         if (showDivider) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 60.dp, end = 20.dp)
-                    .height(1.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            )
+            Box(modifier = Modifier.fillMaxWidth().padding(start = 60.dp, end = 20.dp).height(1.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)))
         }
     }
 }
