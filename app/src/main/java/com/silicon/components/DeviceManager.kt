@@ -27,15 +27,25 @@ import java.util.concurrent.TimeUnit
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.cert.X509Certificate
+import java.util.concurrent.atomic.AtomicLong
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.pow
 
 object DeviceManager {
     data class RamData(val total: String, val used: String, val free: String, val progress: Float)
     data class BatteryData(val level: String, val status: String, val voltage: String, val temp: String, val technology: String, val capacity: String, val cycles: String, val percentInt: Int, val estimatedCapacity: Int)
-    data class StorageData(val total: String, val used: String, val percent: Int, val progress: Float)
+    data class StorageData(val total: String, val used: String, val percent: Int, val progress: Float, val type: String, val model: String)
     data class GpuData(val renderer: String, val vendor: String, val version: String, val extensionsCount: String)
     data class CameraLensInfo(val type: String, val megapixels: String, val aperture: String, val focalLength: String, val resolution: String, val sensorSize: String, val hasOis: Boolean)
     data class CameraSpecs(val backCameras: List<CameraLensInfo>, val frontCameras: List<CameraLensInfo>)
@@ -140,60 +150,21 @@ object DeviceManager {
 
     fun getCameraSpecs(context: Context): CameraSpecs {
         val possibleNames = listOf(Build.DEVICE, Build.MODEL, Build.PRODUCT)
+        var specs: List<CameraLensInfo>? = null
 
-        var pixelSpecs: List<CameraLensInfo>? = null
         for (name in possibleNames) {
-            pixelSpecs = DataPixel.getSpecs(name)
-            if (pixelSpecs != null) break
+            specs = DataPixel.getSpecs(name) ?: DataPlus.getSpecs(name) ?: DataXiaomi.getSpecs(name) ?: DataSamsung.getSpecs(name)
+            if (specs != null) break
         }
 
-        if (pixelSpecs != null) {
-            return CameraSpecs(
-                backCameras = pixelSpecs.filter { !it.type.startsWith("Front") },
-                frontCameras = pixelSpecs.filter { it.type.startsWith("Front") }
+        return if (specs != null) {
+            CameraSpecs(
+                backCameras = specs.filter { !it.type.startsWith("Front") },
+                frontCameras = specs.filter { it.type.startsWith("Front") }
             )
+        } else {
+            CameraSpecs(emptyList(), emptyList())
         }
-
-        var onePlusSpecs: List<CameraLensInfo>? = null
-        for (name in possibleNames) {
-            onePlusSpecs = DataPlus.getSpecs(name)
-            if (onePlusSpecs != null) break
-        }
-
-        if (onePlusSpecs != null) {
-            return CameraSpecs(
-                backCameras = onePlusSpecs.filter { !it.type.startsWith("Front") },
-                frontCameras = onePlusSpecs.filter { it.type.startsWith("Front") }
-            )
-        }
-
-        var xiaomiSpecs: List<CameraLensInfo>? = null
-        for (name in possibleNames) {
-            xiaomiSpecs = DataXiaomi.getSpecs(name)
-            if (xiaomiSpecs != null) break
-        }
-
-        if (xiaomiSpecs != null) {
-            return CameraSpecs(
-                backCameras = xiaomiSpecs.filter { !it.type.startsWith("Front") },
-                frontCameras = xiaomiSpecs.filter { it.type.startsWith("Front") }
-            )
-        }
-
-        var samsungSpecs: List<CameraLensInfo>? = null
-        for (name in possibleNames) {
-            samsungSpecs = DataSamsung.getSpecs(name)
-            if (samsungSpecs != null) break
-        }
-
-        if (samsungSpecs != null) {
-            return CameraSpecs(
-                backCameras = samsungSpecs.filter { !it.type.startsWith("Front") },
-                frontCameras = samsungSpecs.filter { it.type.startsWith("Front") }
-            )
-        }
-
-        return CameraSpecs(emptyList(), emptyList())
     }
 
     fun getRamDetails(context: Context): RamData {
@@ -216,6 +187,33 @@ object DeviceManager {
         )
     }
 
+    private fun getStorageHardwareInfo(): Pair<String, String> {
+        var type = "Unknown Type"
+        var modelStr = "Unknown Model"
+
+        try {
+            val bootDevice = getSystemProperty("ro.boot.bootdevice", "").lowercase()
+            if (bootDevice.contains("ufs")) type = "UFS"
+            else if (bootDevice.contains("mmc")) type = "eMMC"
+            else if (bootDevice.contains("nvme")) type = "NVMe"
+
+            val sdaModelFile = File("/sys/block/sda/device/model")
+            val mmcNameFile = File("/sys/block/mmcblk0/device/name")
+
+            if (sdaModelFile.exists() && sdaModelFile.canRead()) {
+                modelStr = sdaModelFile.readText().trim()
+                if (type == "Unknown Type") {
+                    type = if (File("/sys/block/sda/device/rev").exists() || modelStr.contains("UFS", true)) "UFS" else "NVMe"
+                }
+            } else if (mmcNameFile.exists() && mmcNameFile.canRead()) {
+                if (type == "Unknown Type") type = "eMMC"
+                modelStr = mmcNameFile.readText().trim()
+            }
+        } catch (_: Exception) {}
+
+        return Pair(type, modelStr)
+    }
+
     fun getStorageInfo(): StorageData {
         val path = Environment.getDataDirectory()
         val stat = StatFs(path.path)
@@ -231,12 +229,16 @@ object DeviceManager {
         val usedGB = usedBytes.toDouble() / (1024.0.pow(3.0))
         val percent = if (totalBytes > 0) ((usedBytes.toDouble() / totalBytes.toDouble()) * 100).toInt() else 0
 
+        val hardwareInfo = getStorageHardwareInfo()
+
         val df = DecimalFormat("#.#")
         return StorageData(
             total = "${df.format(totalGB)} GB",
             used = "${df.format(usedGB)} GB",
             percent = percent,
-            progress = percent / 100f
+            progress = percent / 100f,
+            type = hardwareInfo.first,
+            model = hardwareInfo.second
         )
     }
 
@@ -372,10 +374,7 @@ object DeviceManager {
                 keyStore.deleteEntry(alias)
             }
 
-            val keyPairGenerator = KeyPairGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore"
-            )
-
+            val keyPairGenerator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
             val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
                 .setAttestationChallenge("silicon_challenge".toByteArray())
                 .setDigests(KeyProperties.DIGEST_SHA256)
@@ -400,6 +399,66 @@ object DeviceManager {
             }
         } catch (e: Exception) {
             "Error: ${e.message}"
+        }
+    }
+
+    data class ThrottlingResult(
+        val history: List<Float>,
+        val maxPerf: Float,
+        val minPerf: Float,
+        val avgPerf: Float
+    )
+
+    fun runThrottlingTest(): Flow<ThrottlingResult> = flow {
+        val coreCount = Runtime.getRuntime().availableProcessors()
+        val opsCounter = AtomicLong(0)
+
+        coroutineScope {
+            val workers = List(coreCount) {
+                launch(Dispatchers.Default) {
+                    var dummy = 0.0
+                    while (isActive) {
+                        for (i in 0..1000) {
+                            dummy += kotlin.math.sqrt(i.toDouble())
+                        }
+                        opsCounter.addAndGet(1000)
+                    }
+                }
+            }
+
+            val history = mutableListOf<Float>()
+            var maxPerf = 0f
+            var minPerf = Float.MAX_VALUE
+            var sumPerf = 0f
+            var ticks = 0
+            var lastOps = opsCounter.get()
+
+            while (isActive) {
+                delay(1000)
+                val currentOps = opsCounter.get()
+                val delta = currentOps - lastOps
+                lastOps = currentOps
+
+                val currentPerf = delta / 1_000_000f
+                history.add(currentPerf)
+                if (history.size > 60) history.removeAt(0)
+
+                if (currentPerf > maxPerf) maxPerf = currentPerf
+                if (currentPerf < minPerf && ticks > 0) minPerf = currentPerf
+
+                ticks++
+                sumPerf += currentPerf
+                val avgPerf = sumPerf / ticks
+
+                emit(
+                    ThrottlingResult(
+                        history = history.toList(),
+                        maxPerf = maxPerf,
+                        minPerf = if (minPerf == Float.MAX_VALUE) 0f else minPerf,
+                        avgPerf = avgPerf
+                    )
+                )
+            }
         }
     }
 

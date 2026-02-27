@@ -7,10 +7,10 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,7 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun AndroidScreen() {
+fun AndroidScreen(isWideScreen: Boolean = false) {
     val context = LocalContext.current
     val patch = remember { DeviceManager.getSecurityPatch() }
     var isRooted by remember { mutableStateOf(false) }
@@ -42,48 +42,55 @@ fun AndroidScreen() {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Fixed(if (isWideScreen) 2 else 1),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalItemSpacing = 20.dp,
+        modifier = Modifier.fillMaxSize()
     ) {
-        Spacer(Modifier.height(8.dp))
-
-        AndroidSectionGroup(title = "Software", icon = Icons.Default.Android) {
-            InfoRow(
-                icon = Icons.Default.Smartphone,
-                label = "Android Version",
-                value = DeviceManager.getAndroidVersion(),
-                showDivider = true,
-                onClick = {
-                    val currentTime = System.currentTimeMillis()
-                    if (currentTime - lastClickTime < 500) clickCount++ else clickCount = 1
-                    lastClickTime = currentTime
-                    if (clickCount >= 6) { launchEasterEgg(context); clickCount = 0 }
-                }
-            )
-            InfoRow(Icons.Default.Code, "SDK Level", DeviceManager.getSdkVersion(), true)
-            InfoRow(Icons.Default.SettingsSystemDaydream, "Codename", DeviceManager.getAndroidCodename(), false)
+        item {
+            AndroidSectionGroup(title = "Software", icon = Icons.Default.Android) {
+                InfoRow(
+                    icon = Icons.Default.Smartphone,
+                    label = "Android Version",
+                    value = DeviceManager.getAndroidVersion(),
+                    showDivider = true,
+                    onClick = {
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastClickTime < 500) clickCount++ else clickCount = 1
+                        lastClickTime = currentTime
+                        if (clickCount >= 6) { launchEasterEgg(context); clickCount = 0 }
+                    }
+                )
+                InfoRow(Icons.Default.Code, "SDK Level", DeviceManager.getSdkVersion(), true)
+                InfoRow(Icons.Default.SettingsSystemDaydream, "Codename", DeviceManager.getAndroidCodename(), false)
+            }
         }
 
-        AndroidSectionGroup(title = "Firmware", icon = Icons.Default.Build) {
-            InfoRow(Icons.Default.Memory, "Kernel", DeviceManager.getKernelVersion(), true)
-            InfoRow(Icons.Default.BugReport, "Build Number", DeviceManager.getBuildNumber(), true)
-            InfoRow(Icons.Default.Fingerprint, "Fingerprint", DeviceManager.getFingerprint(), false)
+        item {
+            AndroidSectionGroup(title = "Firmware", icon = Icons.Default.Build) {
+                InfoRow(Icons.Default.Memory, "Kernel", DeviceManager.getKernelVersion(), true)
+                InfoRow(Icons.Default.BugReport, "Build Number", DeviceManager.getBuildNumber(), true)
+                InfoRow(Icons.Default.Fingerprint, "Fingerprint", DeviceManager.getFingerprint(), false)
+            }
         }
 
-        AndroidSectionGroup(title = "Security", icon = Icons.Default.Security) {
-            InfoRow(Icons.Default.Update, "Security Patch", patch, true)
-            InfoRow(Icons.Default.Lock, "Bootloader", bootloader, true)
-            InfoRow(icon = Icons.Default.Shield, label = "Root Access", value = if (isRooted) "Detected" else "Not Detected", showDivider = false)
+        item {
+            AndroidSectionGroup(title = "Security", icon = Icons.Default.Security) {
+                InfoRow(Icons.Default.Update, "Security Patch", patch, true)
+                InfoRow(Icons.Default.Lock, "Bootloader", bootloader, true)
+                InfoRow(icon = Icons.Default.Shield, label = "Root Access", value = if (isRooted) "Detected" else "Not Detected", showDivider = false)
+            }
         }
 
-        AndroidSectionGroup(title = "Treble", icon = Icons.Default.Layers) {
-            InfoRow(Icons.Default.ViewQuilt, "Project Treble", DeviceManager.isTrebleSupported(), true)
-            InfoRow(Icons.Default.Sync, "Seamless Updates (A/B)", DeviceManager.isABUpdateSupported(), true)
-            InfoRow(Icons.Default.SystemUpdate, "VNDK Version", DeviceManager.getVndkVersion(), false)
+        item {
+            AndroidSectionGroup(title = "Treble", icon = Icons.Default.Layers) {
+                InfoRow(Icons.Default.ViewQuilt, "Project Treble", DeviceManager.isTrebleSupported(), true)
+                InfoRow(Icons.Default.Sync, "Seamless Updates (A/B)", DeviceManager.isABUpdateSupported(), true)
+                InfoRow(Icons.Default.SystemUpdate, "VNDK Version", DeviceManager.getVndkVersion(), false)
+            }
         }
-
-        Spacer(Modifier.height(32.dp))
     }
 }
 

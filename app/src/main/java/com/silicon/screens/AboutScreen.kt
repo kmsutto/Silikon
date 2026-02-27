@@ -68,43 +68,57 @@ fun AboutScreen() {
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(modifier = Modifier.height(48.dp))
-
-        Surface(shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(120.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(painter = painterResource(id = R.drawable.ic_launcher_monochrome), contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        FilledTonalButton(
-            onClick = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kmsutto/Silikon"))
-                context.startActivity(intent)
-            },
-            modifier = Modifier.fillMaxWidth(0.7f),
-            contentPadding = PaddingValues(vertical = 12.dp)
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 500.dp)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Default.Code, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("GitHub Repository", fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(48.dp))
+
+            Surface(shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(120.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(painter = painterResource(id = R.drawable.ic_launcher_monochrome), contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            FilledTonalButton(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kmsutto/Silikon"))
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth(0.7f),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                Icon(Icons.Default.Code, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("GitHub Repository", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            val updateData = when (val state = updateState) {
+                is UpdateManager.UpdateState.Checking -> AboutUpdateCardModel(Icons.Default.Refresh, "Updates", "Checking...", "Wait...", false, null)
+                is UpdateManager.UpdateState.UpToDate -> AboutUpdateCardModel(Icons.Default.CheckCircle, "Updates", "Up to date", "state.currentVersion", false, { checkUpdates() })
+                is UpdateManager.UpdateState.Available -> AboutUpdateCardModel(Icons.Default.SystemUpdate, "Update Available", state.info.version, "Details", true, { showUpdateDialog = true })
+                is UpdateManager.UpdateState.Tester -> AboutUpdateCardModel(Icons.Default.BugReport, "Beta", state.currentVersion, "Welcome, tester!", true, null)
+                is UpdateManager.UpdateState.Error -> AboutUpdateCardModel(Icons.Default.Warning, "Error", "Failed", "Retry", false, { checkUpdates() })
+            }
+
+            AboutUpdateCard(updateData)
+
+            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(48.dp))
+
+            Text(text = "Beta", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 24.dp))
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        val updateData = when (val state = updateState) {
-            is UpdateManager.UpdateState.Checking -> AboutUpdateCardModel(Icons.Default.Refresh, "Updates", "Checking...", "Wait...", false, null)
-            is UpdateManager.UpdateState.UpToDate -> AboutUpdateCardModel(Icons.Default.CheckCircle, "Updates", "Up to date", "Latest", false, { checkUpdates() })
-            is UpdateManager.UpdateState.Available -> AboutUpdateCardModel(Icons.Default.SystemUpdate, "Update Available", state.info.version, "Details", true, { showUpdateDialog = true })
-            is UpdateManager.UpdateState.Tester -> AboutUpdateCardModel(Icons.Default.BugReport, "Beta Channel", state.currentVersion, "Tester Build", true, { checkUpdates() })
-            is UpdateManager.UpdateState.Error -> AboutUpdateCardModel(Icons.Default.Warning, "Error", "Failed", "Retry", false, { checkUpdates() })
-        }
-
-        AboutUpdateCard(updateData)
-
-        Spacer(modifier = Modifier.weight(1f))
-        Text(text = "Release | V1.5", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
     }
 }
 

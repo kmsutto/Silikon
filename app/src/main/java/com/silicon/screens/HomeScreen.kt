@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(paddingValues: PaddingValues) {
+fun HomeScreen(paddingValues: PaddingValues, isWideScreen: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -68,24 +68,61 @@ fun HomeScreen(paddingValues: PaddingValues) {
             }
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(innerPadding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SectionHeader(icon = Icons.Default.Dashboard, title = "Overview")
-            DashboardCard(icon = Icons.Default.Smartphone, title = DeviceManager.getDeviceName(), subtitle = "Looks Good!", footer = DeviceManager.getDeviceCodename(), isPrimary = true, enabled = !isVibrating)
 
-            Spacer(Modifier.height(4.dp))
-            SectionHeader(icon = Icons.Default.Build, title = "Tools")
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)
+            .padding(innerPadding)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Healing, title = "Fix Burn", subtitle = "RGB Flash", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { isBurnScreenVisible = true }, enabled = !isVibrating)
-                ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Vibration, title = "Vibration", subtitle = if (isVibrating) "Testing..." else "Test Motor", containerColor = MaterialTheme.colorScheme.surfaceContainer, onClick = { startVibration() }, enabled = !isVibrating, isActive = isVibrating)
+        if (isWideScreen) {
+            Row(
+                modifier = contentModifier,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SectionHeader(icon = Icons.Default.Dashboard, title = "Overview")
+                    DashboardCard(icon = Icons.Default.Smartphone, title = DeviceManager.getDeviceName(), subtitle = "Looks Good!", footer = DeviceManager.getDeviceCodename(), isPrimary = true, enabled = !isVibrating)
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SectionHeader(icon = Icons.Default.Build, title = "Tools")
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Healing, title = "Fix Burn", subtitle = "RGB Flash", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { isBurnScreenVisible = true }, enabled = !isVibrating)
+                        ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Vibration, title = "Vibration", subtitle = if (isVibrating) "Testing..." else "Test Motor", containerColor = MaterialTheme.colorScheme.surfaceContainer, onClick = { startVibration() }, enabled = !isVibrating, isActive = isVibrating)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Explore, title = "Sensors", subtitle = "Accelerometer", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { showAccelerometerSheet = true }, enabled = !isVibrating)
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
+        } else {
+            Column(
+                modifier = contentModifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SectionHeader(icon = Icons.Default.Dashboard, title = "Overview")
+                DashboardCard(icon = Icons.Default.Smartphone, title = DeviceManager.getDeviceName(), subtitle = "Looks Good!", footer = DeviceManager.getDeviceCodename(), isPrimary = true, enabled = !isVibrating)
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Explore, title = "Sensors", subtitle = "Accelerometer", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { showAccelerometerSheet = true }, enabled = !isVibrating)
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(Modifier.height(4.dp))
+                SectionHeader(icon = Icons.Default.Build, title = "Tools")
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Healing, title = "Fix Burn", subtitle = "RGB Flash", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { isBurnScreenVisible = true }, enabled = !isVibrating)
+                    ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Vibration, title = "Vibration", subtitle = if (isVibrating) "Testing..." else "Test Motor", containerColor = MaterialTheme.colorScheme.surfaceContainer, onClick = { startVibration() }, enabled = !isVibrating, isActive = isVibrating)
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ToolCard(modifier = Modifier.weight(1f), icon = Icons.Default.Explore, title = "Sensors", subtitle = "Accelerometer", containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { showAccelerometerSheet = true }, enabled = !isVibrating)
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
@@ -142,8 +179,6 @@ fun ToolCard(modifier: Modifier, icon: ImageVector, title: String, subtitle: Str
         }
     }
 }
-
-data class UpdateCardModel(val icon: ImageVector, val title: String, val subtitle: String, val footer: String, val isPrimary: Boolean, val onClick: (() -> Unit)?)
 
 @Composable
 fun DashboardCard(icon: ImageVector, title: String, subtitle: String, footer: String, isPrimary: Boolean, onClick: (() -> Unit)? = null, enabled: Boolean) {
