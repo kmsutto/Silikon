@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("kotlin-parcelize")
     id("com.google.devtools.ksp")
 }
 
@@ -16,9 +15,8 @@ android {
         minSdk = 31
         targetSdk = 36
         versionCode = 1
-        versionName = "1.5.1_SunValley"
+        versionName = "1.5.2_SunBreeze"
         resourceConfigurations += setOf("en")
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,8 +36,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-        viewBinding = true
-        aidl = true
     }
     dependenciesInfo {
         includeInApk = true
@@ -67,7 +63,6 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.7")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("androidx.core:core-splashscreen:1.2.0")
-    implementation("androidx.glance:glance-material3:1.1.1")
     implementation(libs.androidx.room.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -1,5 +1,6 @@
 package com.silicon.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -40,10 +41,13 @@ fun HardwareScreen(isWideScreen: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var ram by remember { mutableStateOf(DeviceManager.getRamDetails(context)) }
-    var bat by remember { mutableStateOf(DeviceManager.getBatteryInfo(context)) }
-    var storage by remember { mutableStateOf(DeviceManager.getStorageInfo()) }
+    var ram by remember { mutableStateOf(DeviceManager.RamData("...", "...", "...", 0f)) }
+    var storage by remember { mutableStateOf(DeviceManager.StorageData("...", "...", 0, 0f, "...", "...")) }
     var gpuData by remember { mutableStateOf(DeviceManager.GpuData("Loading...", "...", "...", "...")) }
+
+    val bat by DeviceManager.getBatteryFlow(context).collectAsState(
+        initial = DeviceManager.BatteryData("...", "...", "...", "...", "...", "...", "...", 0, 0)
+    )
 
     var showPartitionsSheet by remember { mutableStateOf(false) }
     var partitionsList by remember { mutableStateOf<List<DeviceManager.PartitionData>>(emptyList()) }
@@ -62,15 +66,19 @@ fun HardwareScreen(isWideScreen: Boolean = false) {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val data = DeviceManager.getGpuDetails()
-            withContext(Dispatchers.Main) { gpuData = data }
+            val storageInfo = DeviceManager.getStorageInfo()
+            withContext(Dispatchers.Main) {
+                gpuData = data
+                storage = storageInfo
+            }
         }
     }
 
     LaunchedEffect(Unit) {
         while (isActive) {
-            ram = DeviceManager.getRamDetails(context)
-            bat = DeviceManager.getBatteryInfo(context)
-            delay(1000)
+            val ramInfo = DeviceManager.getRamDetails(context)
+            withContext(Dispatchers.Main) { ram = ramInfo }
+            delay(2000)
         }
     }
 
@@ -392,8 +400,8 @@ fun HardwareScreen(isWideScreen: Boolean = false) {
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isThrottlingTestRunning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = if (isThrottlingTestRunning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
+                            containerColor = if (isThrottlingTestRunning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = if (isThrottlingTestRunning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     ) {
                         Icon(if (isThrottlingTestRunning) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = null)
@@ -454,7 +462,13 @@ fun HardwareSectionGroup(title: String, icon: ImageVector, content: @Composable 
                 Text(text = title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+        ) {
             content()
         }
     }
@@ -569,8 +583,9 @@ fun BatteryContent(bat: com.silicon.ui.components.DeviceManager.BatteryData) {
 
 @Composable
 fun ControlBlock(modifier: Modifier, icon: ImageVector, label: String, value: String, isActive: Boolean) {
-    val containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
-    val contentColor = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    val containerColor = if (isActive) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+    val contentColor = if (isActive) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+
     Card(modifier.height(100.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = containerColor)) {
         Column(Modifier.padding(16.dp).fillMaxSize(), Arrangement.SpaceBetween) {
             Icon(icon, null, tint = contentColor)

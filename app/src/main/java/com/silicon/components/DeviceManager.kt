@@ -4,6 +4,9 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.ImageFormat
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.opengl.GLES20
 import android.os.BatteryManager
 import android.os.Build
@@ -14,10 +17,6 @@ import android.view.WindowManager
 import android.view.WindowMetrics
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import com.silicon.ui.components.database.DataPixel
-import com.silicon.ui.components.database.DataPlus
-import com.silicon.ui.components.database.DataSamsung
-import com.silicon.ui.components.database.DataXiaomi
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileReader
@@ -32,15 +31,18 @@ import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 object DeviceManager {
     data class RamData(val total: String, val used: String, val free: String, val progress: Float)
@@ -149,22 +151,163 @@ object DeviceManager {
     }
 
     fun getCameraSpecs(context: Context): CameraSpecs {
-        val possibleNames = listOf(Build.DEVICE, Build.MODEL, Build.PRODUCT)
-        var specs: List<CameraLensInfo>? = null
+        val manager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val backCameras = mutableListOf<CameraLensInfo>()
+        val frontCameras = mutableListOf<CameraLensInfo>()
+        val processedIds = mutableSetOf<String>()
 
-        for (name in possibleNames) {
-            specs = DataPixel.getSpecs(name) ?: DataPlus.getSpecs(name) ?: DataXiaomi.getSpecs(name) ?: DataSamsung.getSpecs(name)
-            if (specs != null) break
+        try {
+            for (logicalId in manager.cameraIdList) {
+                val logicalChars = manager.getCameraCharacteristics(logicalId)
+
+                val physicalIds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    logicalChars.physicalCameraIds
+                } else emptySet()
+
+                if (physicalIds.isNotEmpty()) {
+                    for (physId in physicalIds) {
+                        if (processedIds.add(physId)) {
+                            val physChars = manager.getCameraCharacteristics(physId)
+                            parseCameraAndAdd(physId, physChars, logicalChars, backCameras, frontCameras)
+                        }
+                    }
+                } else {
+                    if (processedIds.add(logicalId)) {
+                        parseCameraAndAdd(logicalId, logicalChars, logicalChars, backCameras, frontCameras)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
 
-        return if (specs != null) {
-            CameraSpecs(
-                backCameras = specs.filter { !it.type.startsWith("Front") },
-                frontCameras = specs.filter { it.type.startsWith("Front") }
-            )
+        return CameraSpecs(
+            backCameras.sortedByDescending { it.megapixels.substringBefore(" ").toFloatOrNull() ?: 0f },
+            frontCameras.sortedByDescending { it.megapixels.substringBefore(" ").toFloatOrNull() ?: 0f }
+        )
+    }
+
+    private fun parseCameraAndAdd(
+        id: String,
+        chars: CameraCharacteristics,
+        logicalChars: CameraCharacteristics,
+        back: MutableList<CameraLensInfo>,
+        front: MutableList<CameraLensInfo>
+    ) {
+        val facing = chars.get(CameraCharacteristics.LENS_FACING)
+        val isFront = facing == CameraCharacteristics.LENS_FACING_FRONT
+
+        var sensorStr = "Unknown"
+        var cropFactor = 0.0
+        var diagMm = 0.0
+        val sensorSize = chars.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+
+        if (sensorSize != null && sensorSize.width > 0 && sensorSize.height > 0) {
+            diagMm = kotlin.math.sqrt((sensorSize.width * sensorSize.width + sensorSize.height * sensorSize.height).toDouble())
+            if (diagMm > 0) {
+                val opticalFraction = 16.0 / diagMm
+                sensorStr = String.format(java.util.Locale.US, "1/%.2f\"", opticalFraction)
+                cropFactor = 43.27 / diagMm
+            }
+        }
+
+        var resString = "Unknown"
+        var mpString = "Unknown"
+        var mpFloat = 0f
+
+        val pixelArraySize = chars.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+        if (pixelArraySize != null) {
+            var width = pixelArraySize.width
+            var height = pixelArraySize.height
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val maxResMap = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP_MAXIMUM_RESOLUTION)
+                val sizes = maxResMap?.getOutputSizes(android.graphics.ImageFormat.JPEG)
+                val maxObj = sizes?.maxByOrNull { it.width * it.height }
+                if (maxObj != null && (maxObj.width * maxObj.height) > (width * height)) {
+                    width = maxObj.width
+                    height = maxObj.height
+                }
+            }
+
+            mpFloat = (width * height) / 1_000_000f
+
+            val vendor = Build.MANUFACTURER.lowercase()
+            val isChineseOEM = vendor in listOf("oneplus", "oppo", "vivo", "xiaomi", "redmi", "poco", "realme", "iqoo")
+
+            if (isChineseOEM) {
+                if (mpFloat in 11.5..13.5) {
+                    mpFloat *= 4; width *= 2; height *= 2
+                } else if (mpFloat in 3.5..4.5) {
+                    mpFloat *= 4; width *= 2; height *= 2
+                } else if (mpFloat in 7.0..8.5) {
+                    mpFloat *= 4; width *= 2; height *= 2
+                } else if (mpFloat in 15.0..16.5) {
+                    mpFloat *= 4; width *= 2; height *= 2
+                }
+            } else {
+                var pixelPitch = 0.0
+                if (width > 0 && diagMm > 0) pixelPitch = (sensorSize!!.width.toDouble() / width) * 1000.0
+
+                if (mpFloat in 11.5..13.0 && diagMm > 11.0) {
+                    mpFloat *= 16; width *= 4; height *= 4
+                } else if (mpFloat in 11.0..12.5 && diagMm > 9.0 && pixelPitch > 1.9) {
+                    mpFloat *= 9; width *= 3; height *= 3
+                }
+            }
+
+            resString = "$width x $height"
+            mpString = if (mpFloat > 10) {
+                String.format(java.util.Locale.US, "%.0f MP", mpFloat)
+            } else {
+                String.format(java.util.Locale.US, "%.1f MP", mpFloat)
+            }
+        }
+
+        val apertures = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
+        val apertureStr = if (apertures != null && apertures.isNotEmpty()) "f/${apertures[0]}" else "Unknown"
+
+        var focalStr = "Unknown"
+        var lensType = "Lens"
+        val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+
+        if (focalLengths != null && focalLengths.isNotEmpty()) {
+            val focalPhys = focalLengths[0]
+            if (cropFactor > 0) {
+                val eq = (focalPhys * cropFactor).roundToInt()
+                focalStr = "~${eq}mm"
+                when {
+                    eq < 20 -> lensType = "Ultrawide"
+                    eq in 20..35 -> lensType = "Main"
+                    eq > 35 -> lensType = "Telephoto"
+                }
+            } else {
+                focalStr = "${focalPhys}mm (Phys)"
+                when {
+                    focalPhys < 3.5f -> lensType = "Ultrawide"
+                    focalPhys in 3.5f..7.5f -> lensType = "Main"
+                    focalPhys > 7.5f -> lensType = "Telephoto"
+                }
+            }
+        }
+
+        var hasOis = false
+        val oisModes = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)
+        if (oisModes != null && oisModes.any { it != CameraCharacteristics.LENS_OPTICAL_STABILIZATION_MODE_OFF }) {
+            hasOis = true
         } else {
-            CameraSpecs(emptyList(), emptyList())
+            val logicalOisModes = logicalChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)
+            if (logicalOisModes != null && logicalOisModes.any { it != CameraCharacteristics.LENS_OPTICAL_STABILIZATION_MODE_OFF }) {
+                if (lensType == "Main" || lensType == "Telephoto") {
+                    hasOis = true
+                }
+            }
         }
+
+        val typeName = if (isFront) "Front ($lensType)" else lensType
+
+        val info = CameraLensInfo(typeName, mpString, apertureStr, focalStr, resString, sensorStr, hasOis)
+        if (isFront) front.add(info) else back.add(info)
     }
 
     fun getRamDetails(context: Context): RamData {
@@ -306,42 +449,54 @@ object DeviceManager {
         return partitions.sortedByDescending { it.percent }
     }
 
-    fun getBatteryInfo(context: Context): BatteryData {
-        val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) ?: 0
-        val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
-        val percent = if (scale > 0) (level * 100 / scale.toFloat()).toInt() else 0
+    fun getBatteryFlow(context: Context): Flow<BatteryData> = callbackFlow {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
+                val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+                val percent = if (scale > 0) (level * 100 / scale.toFloat()).toInt() else 0
 
-        val status = when (intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1)) {
-            BatteryManager.BATTERY_STATUS_CHARGING -> "Charging"
-            BatteryManager.BATTERY_STATUS_DISCHARGING -> "Discharging"
-            BatteryManager.BATTERY_STATUS_FULL -> "Full"
-            else -> "Idle"
+                val status = when (intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)) {
+                    BatteryManager.BATTERY_STATUS_CHARGING -> "Charging"
+                    BatteryManager.BATTERY_STATUS_DISCHARGING -> "Discharging"
+                    BatteryManager.BATTERY_STATUS_FULL -> "Full"
+                    else -> "Idle"
+                }
+
+                val temp = (intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0)) / 10.0
+                val tech = intent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: "Li-ion"
+
+                var cycles = if (Build.VERSION.SDK_INT >= 34) intent.getIntExtra("android.os.extra.CYCLE_COUNT", -1) else -1
+                if (cycles == -1) cycles = findValueInFiles(listOf("/sys/class/power_supply/battery/cycle_count", "/sys/class/power_supply/battery/battery_cycle")).toIntOrNull() ?: 0
+
+                var cap = findValueInFiles(listOf("/sys/class/power_supply/battery/charge_full_design", "/sys/class/power_supply/battery/batt_capacity_max")).toIntOrNull()?.div(1000) ?: 0
+                if (cap <= 0) {
+                    try {
+                        val powerProfileClass = Class.forName("com.android.internal.os.PowerProfile")
+                        val powerProfile = powerProfileClass.getConstructor(Context::class.java).newInstance(context)
+                        cap = (powerProfileClass.getMethod("getBatteryCapacity").invoke(powerProfile) as Double).toInt()
+                    } catch (_: Exception) {}
+                }
+
+                val voltageMv = intent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0)
+                val voltageStr = String.format(java.util.Locale.US, "%.1f V", if (voltageMv > 100) voltageMv / 1000f else voltageMv.toFloat())
+
+                val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                val chargeCounter = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) / 1000
+                val estimatedCapacity = if (percent > 0) (chargeCounter * 100) / percent else 0
+
+                trySend(
+                    BatteryData("$percent%", status, voltageStr, "$temp°C", tech, if (cap > 0) "$cap mAh" else "Unknown", if (cycles > 0) "$cycles" else "—", percent, estimatedCapacity)
+                )
+            }
         }
 
-        val temp = (intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10.0
-        val tech = intent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: "Li-ion"
-        var cycles = if (Build.VERSION.SDK_INT >= 34) intent?.getIntExtra("android.os.extra.CYCLE_COUNT", -1) ?: -1 else -1
-        if (cycles == -1) cycles = findValueInFiles(listOf("/sys/class/power_supply/battery/cycle_count", "/sys/class/power_supply/battery/battery_cycle")).toIntOrNull() ?: 0
+        context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
 
-        var cap = findValueInFiles(listOf("/sys/class/power_supply/battery/charge_full_design", "/sys/class/power_supply/battery/batt_capacity_max")).toIntOrNull()?.div(1000) ?: 0
-        if (cap <= 0) {
-            try {
-                val powerProfileClass = Class.forName("com.android.internal.os.PowerProfile")
-                val powerProfile = powerProfileClass.getConstructor(Context::class.java).newInstance(context)
-                cap = (powerProfileClass.getMethod("getBatteryCapacity").invoke(powerProfile) as Double).toInt()
-            } catch (_: Exception) {}
+        awaitClose {
+            context.unregisterReceiver(receiver)
         }
-
-        val voltageMv = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
-        val voltageStr = String.format(java.util.Locale.US, "%.1f V", if (voltageMv > 100) voltageMv / 1000f else voltageMv.toFloat())
-
-        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        val chargeCounter = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) / 1000
-        val estimatedCapacity = if (percent > 0) (chargeCounter * 100) / percent else 0
-
-        return BatteryData("$percent%", status, voltageStr, "$temp°C", tech, if (cap > 0) "$cap mAh" else "Unknown", if (cycles > 0) "$cycles" else "—", percent, estimatedCapacity)
-    }
+    }.flowOn(Dispatchers.IO)
 
     fun isRooted(): Boolean {
         val buildTags = Build.TAGS

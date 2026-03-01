@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -75,7 +77,15 @@ class MainActivity : ComponentActivity() {
                             items.forEachIndexed { index, item ->
                                 val isSelected = currentRoute == item
                                 NavigationRailItem(
-                                    icon = { Icon(if (isSelected) selectedIcons[index] else unselectedIcons[index], contentDescription = item) },
+                                    icon = {
+                                        Crossfade(
+                                            targetState = isSelected,
+                                            label = "NavIconAnimation",
+                                            animationSpec = tween(durationMillis = 250)
+                                        ) { selected ->
+                                            Icon(if (selected) selectedIcons[index] else unselectedIcons[index], contentDescription = item)
+                                        }
+                                    },
                                     label = { Text(item) },
                                     selected = isSelected,
                                     onClick = {
@@ -129,7 +139,15 @@ class MainActivity : ComponentActivity() {
                                     items.forEachIndexed { index, item ->
                                         val isSelected = currentRoute == item
                                         NavigationBarItem(
-                                            icon = { Icon(if (isSelected) selectedIcons[index] else unselectedIcons[index], contentDescription = item) },
+                                            icon = {
+                                                Crossfade(
+                                                    targetState = isSelected,
+                                                    label = "NavIconAnimation",
+                                                    animationSpec = tween(durationMillis = 250)
+                                                ) { selected ->
+                                                    Icon(if (selected) selectedIcons[index] else unselectedIcons[index], contentDescription = item)
+                                                }
+                                            },
                                             label = { Text(item) },
                                             selected = isSelected,
                                             onClick = {

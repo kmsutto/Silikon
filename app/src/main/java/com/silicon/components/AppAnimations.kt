@@ -1,39 +1,29 @@
 package com.silicon.ui.components
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.unit.IntOffset
 
 object AppAnimations {
-
-    private val motionSpec = spring<IntOffset>(stiffness = 380f, dampingRatio = 0.75f)
-    private val scaleSpec = spring<Float>(stiffness = 380f, dampingRatio = 0.75f)
+    private const val Duration = 300
 
     fun enterTransition(targetIndex: Int, initialIndex: Int): EnterTransition {
         val direction = if (targetIndex > initialIndex) 1 else -1
         return slideInHorizontally(
-            initialOffsetX = { fullWidth -> direction * fullWidth },
-            animationSpec = motionSpec
+            initialOffsetX = { fullWidth -> direction * (fullWidth / 8) },
+            animationSpec = tween(Duration, easing = FastOutSlowInEasing)
         ) + fadeIn(
-            animationSpec = tween(durationMillis = 400)
-        ) + scaleIn(
-            initialScale = 0.96f,
-            animationSpec = scaleSpec
+            animationSpec = tween(Duration, easing = FastOutSlowInEasing)
         )
     }
 
     fun exitTransition(targetIndex: Int, initialIndex: Int): ExitTransition {
         val direction = if (targetIndex > initialIndex) 1 else -1
         return slideOutHorizontally(
-            targetOffsetX = { fullWidth -> -direction * (fullWidth / 4) },
-            animationSpec = motionSpec
+            targetOffsetX = { fullWidth -> -direction * (fullWidth / 8) },
+            animationSpec = tween(Duration, easing = FastOutSlowInEasing)
         ) + fadeOut(
-            animationSpec = tween(durationMillis = 400)
-        ) + scaleOut(
-            targetScale = 0.96f,
-            animationSpec = scaleSpec
+            animationSpec = tween(Duration / 2)
         )
     }
 }

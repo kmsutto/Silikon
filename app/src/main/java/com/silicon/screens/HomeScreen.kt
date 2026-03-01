@@ -50,7 +50,7 @@ fun HomeScreen(paddingValues: PaddingValues, isWideScreen: Boolean = false) {
         }
     }
 
-    if (isBurnScreenVisible) BurnScreen(onDismiss = { isBurnScreenVisible = false })
+    if (isBurnScreenVisible) ToolsManager.BurnScreen(onDismiss = { isBurnScreenVisible = false })
 
     Scaffold(
         containerColor = Color.Transparent,

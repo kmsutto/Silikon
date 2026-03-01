@@ -1,9 +1,6 @@
 package com.silicon.ui.screens
 
-import android.content.Context
-import android.content.Intent
-import android.provider.Settings
-import android.widget.Toast
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -32,8 +29,6 @@ fun AndroidScreen(isWideScreen: Boolean = false) {
     val patch = remember { DeviceManager.getSecurityPatch() }
     var isRooted by remember { mutableStateOf(false) }
     var bootloader by remember { mutableStateOf("Checking hardware...") }
-    var clickCount by remember { mutableIntStateOf(0) }
-    var lastClickTime by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -51,18 +46,7 @@ fun AndroidScreen(isWideScreen: Boolean = false) {
     ) {
         item {
             AndroidSectionGroup(title = "Software", icon = Icons.Default.Android) {
-                InfoRow(
-                    icon = Icons.Default.Smartphone,
-                    label = "Android Version",
-                    value = DeviceManager.getAndroidVersion(),
-                    showDivider = true,
-                    onClick = {
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastClickTime < 500) clickCount++ else clickCount = 1
-                        lastClickTime = currentTime
-                        if (clickCount >= 6) { launchEasterEgg(context); clickCount = 0 }
-                    }
-                )
+                InfoRow(Icons.Default.Smartphone, "Android Version", DeviceManager.getAndroidVersion(), true)
                 InfoRow(Icons.Default.Code, "SDK Level", DeviceManager.getSdkVersion(), true)
                 InfoRow(Icons.Default.SettingsSystemDaydream, "Codename", DeviceManager.getAndroidCodename(), false)
             }
@@ -94,25 +78,6 @@ fun AndroidScreen(isWideScreen: Boolean = false) {
     }
 }
 
-private fun launchEasterEgg(context: Context) {
-    try {
-        val eggIntent = Intent(Intent.ACTION_MAIN)
-        eggIntent.setPackage("com.android.egg")
-        val activities = context.packageManager.queryIntentActivities(eggIntent, 0)
-        if (activities.isNotEmpty()) {
-            eggIntent.setClassName("com.android.egg", activities[0].activityInfo.name)
-            eggIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            context.startActivity(eggIntent)
-        } else {
-            val settingsIntent = Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)
-            settingsIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            context.startActivity(settingsIntent)
-        }
-    } catch (e: Exception) {
-        Toast.makeText(context, "Easter Egg not found: ${e.message}", Toast.LENGTH_SHORT).show()
-    }
-}
-
 @Composable
 fun AndroidSectionGroup(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -123,7 +88,13 @@ fun AndroidSectionGroup(title: String, icon: ImageVector, content: @Composable C
                 Text(text = title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize()
+        ) {
             Column(modifier = Modifier.padding(vertical = 4.dp)) { content() }
         }
     }
