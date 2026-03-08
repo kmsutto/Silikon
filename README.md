@@ -1,5 +1,5 @@
 
-## Silikon - Device info checker with a MD3E desing
+## Silicon - Device info checker with a MD3E desing
 This is a simple mini-utility for checking basic information about a device, for example: **information about the processor, GPU, display, android**, and so on
 
 ## Features
