@@ -1,3 +1,6 @@
+> [!NOTE]
+> Development of this **project has been temporarily discontinued** for some reason, and as of **3/13/26** no asset should be expected in this project.
+
 ## Silicon - Device info checker
 This is a simple mini-utility for checking basic information about a device, for example: **information about the processor, GPU, display, android**, and so on
 
